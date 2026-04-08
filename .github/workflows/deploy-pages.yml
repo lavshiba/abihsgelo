@@ -3,6 +3,7 @@ name: deploy-pages
 on:
   push:
     branches: ["main"]
+  workflow_dispatch:
 
 jobs:
   deploy:
