@@ -2,6 +2,7 @@ name = "abihsgelo"
 main = "worker/src/index.ts"
 compatibility_date = "2026-04-08"
 workers_dev = true
+pages_build_output_dir = "frontend/dist"
 
 [triggers]
 crons = ["7,17,27,37,47,57 * * * *"]
