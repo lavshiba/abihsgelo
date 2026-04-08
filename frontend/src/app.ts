@@ -179,9 +179,56 @@ export class AppController {
         ${upper ? this.renderPasswordLines(upper) : `<span class="center-cursor"></span>`}
       </div>
     `;
-    shell.append(block);
+    const controls = document.createElement("form");
+    controls.className = "password-controls";
+    controls.innerHTML = `
+      <label class="password-label" for="password-fallback">hidden entry</label>
+      <input
+        id="password-fallback"
+        class="password-input"
+        type="password"
+        inputmode="text"
+        autocomplete="off"
+        autocapitalize="none"
+        autocorrect="off"
+        spellcheck="false"
+        placeholder="type password"
+        value="${this.escapeHtml(this.passwordBuffer)}"
+      />
+      <div class="password-actions">
+        <button type="submit" class="password-submit">enter</button>
+        <button type="button" class="password-cancel">back</button>
+      </div>
+    `;
 
-    queueMicrotask(() => block.focus());
+    const input = controls.querySelector<HTMLInputElement>(".password-input");
+    input?.addEventListener("input", (event) => {
+      this.passwordBuffer = (event.currentTarget as HTMLInputElement).value;
+      this.render();
+    });
+    controls.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void this.submitPassword();
+    });
+    controls.querySelector<HTMLButtonElement>(".password-cancel")?.addEventListener("click", () => {
+      this.passwordBuffer = "";
+      this.scene = "home";
+      this.render();
+    });
+
+    shell.addEventListener("click", (event) => {
+      if (!(event.target instanceof HTMLElement)) {
+        return;
+      }
+      if (event.target.closest(".password-controls")) {
+        return;
+      }
+      input?.focus();
+    });
+
+    shell.append(block, controls);
+
+    queueMicrotask(() => input?.focus() ?? block.focus());
     return shell;
   }
 
@@ -733,6 +780,15 @@ export class AppController {
 
   private apiUrl(path: string): string {
     return `${API_BASE}${path}`;
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
   }
 
   private formatTimestamp(value: string): string {
