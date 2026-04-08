@@ -72,15 +72,15 @@ or use an API token in the environment, not in code.
 npx wrangler d1 create abihsgelo
 ```
 
-3. Update binding IDs in [wrangler.toml](/home/abihsgelo/Документы/abihsgelo/wrangler.toml).
+3. Update binding IDs in [worker/wrangler.toml](/home/abihsgelo/Документы/abihsgelo/worker/wrangler.toml).
 
 Analytics Engine dataset `abihsgelo_events` does not need a separate create command in current Cloudflare tooling; it is created automatically on first write when the binding exists.
 
 4. Apply remote migrations:
 
 ```bash
-npx wrangler d1 migrations apply DB --config wrangler.toml --remote
-npx wrangler d1 execute DB --config wrangler.toml --remote --file worker/migrations/0002_seed.sql
+npx wrangler d1 migrations apply DB --config worker/wrangler.toml --remote
+npx wrangler d1 execute DB --config worker/wrangler.toml --remote --file worker/migrations/0002_seed.sql
 ```
 
 5. Deploy Worker:

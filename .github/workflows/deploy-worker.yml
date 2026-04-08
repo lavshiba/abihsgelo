@@ -23,4 +23,4 @@ jobs:
       - run: npm run build
       - run: npm run smoke
       - name: Deploy Worker
-        run: npx wrangler@4.81.0 deploy --config wrangler.toml
+        run: npx wrangler@4.81.0 deploy --config worker/wrangler.toml

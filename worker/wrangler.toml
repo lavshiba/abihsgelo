@@ -1,0 +1,23 @@
+name = "abihsgelo"
+main = "src/index.ts"
+compatibility_date = "2026-04-08"
+workers_dev = true
+
+[triggers]
+crons = ["7,17,27,37,47,57 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "abihsgelo"
+database_id = "e3df8e04-9240-4fcc-a397-89d2d06565cb"
+migrations_dir = "migrations"
+
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "abihsgelo_events"
+
+[vars]
+SITE_ORIGIN = "https://abihsgelo"
+
+[observability.logs]
+enabled = true

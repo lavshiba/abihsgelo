@@ -14,7 +14,7 @@
   "scripts": {
     "dev": "concurrently -n frontend,worker -c cyan,green \"npm run dev:frontend\" \"npm run dev:worker\"",
     "dev:frontend": "vite --config vite.config.ts",
-    "dev:worker": "npx wrangler dev --config wrangler.toml --local --port 8787",
+    "dev:worker": "npx wrangler dev --config worker/wrangler.toml --local --port 8787",
     "build": "npm run build:shared && npm run build:frontend && npm run build:worker && npm run snapshot:update",
     "build:shared": "tsc -p shared/tsconfig.json",
     "build:frontend": "vite build --config vite.config.ts",
@@ -22,9 +22,9 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "db:migrate": "npx wrangler d1 migrations apply DB --config wrangler.toml --local",
-    "db:seed": "npx wrangler d1 execute DB --config wrangler.toml --local --file worker/migrations/0002_seed.sql",
-    "deploy": "npm run lint && npm run typecheck && npm run test && npm run build && npx wrangler deploy --config wrangler.toml",
+    "db:migrate": "npx wrangler d1 migrations apply DB --config worker/wrangler.toml --local",
+    "db:seed": "npx wrangler d1 execute DB --config worker/wrangler.toml --local --file worker/migrations/0002_seed.sql",
+    "deploy": "npm run lint && npm run typecheck && npm run test && npm run build && npx wrangler deploy --config worker/wrangler.toml",
     "snapshot:update": "node scripts/snapshot-update.mjs",
     "health:check": "node scripts/health-check.mjs",
     "smoke": "node scripts/smoke-check.mjs"
