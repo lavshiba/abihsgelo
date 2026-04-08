@@ -17,7 +17,7 @@ binding = "ANALYTICS"
 dataset = "abihsgelo_events"
 
 [vars]
-SITE_ORIGIN = "https://abihsgelo"
+SITE_ORIGIN = "https://abihsgelo.pages.dev"
 
 [observability.logs]
 enabled = true

@@ -10,6 +10,7 @@ import type {
 } from "@abihsgelo/shared";
 
 type SceneState = "home" | "password" | "mode";
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") ?? "";
 
 interface SessionState {
   token: string | null;
@@ -50,7 +51,7 @@ export class AppController {
 
   public async start(): Promise<void> {
     this.snapshot = await this.loadSnapshot();
-    this.bootstrap = await this.fetchJson<BootstrapPayload>("/api/bootstrap").catch(() => FALLBACK_BOOTSTRAP);
+    this.bootstrap = await this.fetchJson<BootstrapPayload>(this.apiUrl("/api/bootstrap")).catch(() => FALLBACK_BOOTSTRAP);
     void this.track("site_open");
     this.render();
   }
@@ -240,7 +241,7 @@ export class AppController {
     }, 3800);
 
     try {
-      const result = await this.fetchJson<{ ok: boolean; mode?: string; token?: string }>("/api/auth/enter", {
+      const result = await this.fetchJson<{ ok: boolean; mode?: string; token?: string }>(this.apiUrl("/api/auth/enter"), {
         method: "POST",
         body: JSON.stringify({ password: this.passwordBuffer }),
         headers: { "Content-Type": "application/json" }
@@ -268,7 +269,7 @@ export class AppController {
   }
 
   private async renderProxiesScene(): Promise<void> {
-    const payload = await this.fetchJson<ProxiesPayload>("/api/modes/proxies_mode", {
+    const payload = await this.fetchJson<ProxiesPayload>(this.apiUrl("/api/modes/proxies_mode"), {
       headers: this.authHeaders()
     }).catch(() => {
       return {
@@ -360,7 +361,7 @@ export class AppController {
   }
 
   private async renderAdminScene(): Promise<void> {
-    const payload = await this.fetchJson<AdminPayload>("/api/admin/bootstrap", {
+    const payload = await this.fetchJson<AdminPayload>(this.apiUrl("/api/admin/bootstrap"), {
       headers: this.authHeaders()
     });
 
@@ -437,7 +438,7 @@ export class AppController {
       row.addEventListener("submit", (event) => {
         event.preventDefault();
         const form = new FormData(row);
-        void this.fetchJson(`/api/admin/modes/${mode.id}`, {
+        void this.fetchJson(this.apiUrl(`/api/admin/modes/${mode.id}`), {
           method: "PUT",
           headers: { ...this.authHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -468,7 +469,7 @@ export class AppController {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const data = new FormData(form);
-      void this.fetchJson("/api/admin/settings", {
+      void this.fetchJson(this.apiUrl("/api/admin/settings"), {
         method: "PUT",
         headers: { ...this.authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -506,7 +507,7 @@ export class AppController {
       row.addEventListener("submit", (event) => {
         event.preventDefault();
         const form = new FormData(row);
-        void this.fetchJson(`/api/admin/access-rules/${rule.id}`, {
+        void this.fetchJson(this.apiUrl(`/api/admin/access-rules/${rule.id}`), {
           method: "PUT",
           headers: { ...this.authHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -532,7 +533,7 @@ export class AppController {
     add.addEventListener("submit", (event) => {
       event.preventDefault();
       const form = new FormData(add);
-      void this.fetchJson("/api/admin/access-rules", {
+      void this.fetchJson(this.apiUrl("/api/admin/access-rules"), {
         method: "POST",
         headers: { ...this.authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -564,7 +565,7 @@ export class AppController {
       row.addEventListener("submit", (event) => {
         event.preventDefault();
         const form = new FormData(row);
-        void this.fetchJson(`/api/admin/wallets/${wallet.id}`, {
+        void this.fetchJson(this.apiUrl(`/api/admin/wallets/${wallet.id}`), {
           method: "PUT",
           headers: { ...this.authHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -585,7 +586,7 @@ export class AppController {
     wrap.className = "admin-actions";
     for (const kind of ["access_rules", "wallets", "site_settings"]) {
       const anchor = document.createElement("a");
-      anchor.href = `/api/admin/export?kind=${kind}`;
+      anchor.href = this.apiUrl(`/api/admin/export?kind=${kind}`);
       anchor.textContent = `export ${kind}`;
       anchor.target = "_blank";
       anchor.rel = "noreferrer";
@@ -625,7 +626,7 @@ export class AppController {
         return;
       }
       const text = await file.text();
-      await this.fetchJson(`/api/admin/import?kind=${select.value}`, {
+      await this.fetchJson(this.apiUrl(`/api/admin/import?kind=${select.value}`), {
         method: "POST",
         headers: { ...this.authHeaders(), "Content-Type": "application/json" },
         body: text
@@ -687,7 +688,7 @@ export class AppController {
   }
 
   private async adminAction(path: string): Promise<void> {
-    await this.fetchJson(path, { method: "POST", headers: this.authHeaders() });
+    await this.fetchJson(this.apiUrl(path), { method: "POST", headers: this.authHeaders() });
     this.render();
   }
 
@@ -723,11 +724,15 @@ export class AppController {
   }
 
   private async track(eventType: string, metadata: Record<string, unknown> = {}): Promise<void> {
-    await fetch("/api/bootstrap", {
+    await fetch(this.apiUrl("/api/bootstrap"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ eventType, metadata })
     }).catch(() => undefined);
+  }
+
+  private apiUrl(path: string): string {
+    return `${API_BASE}${path}`;
   }
 
   private formatTimestamp(value: string): string {

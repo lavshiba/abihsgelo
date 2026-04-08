@@ -59,6 +59,7 @@ Controls:
 - admin is a hidden protected mode, not a public route
 - audit trail records successes, failures, and admin changes
 - analytics use IDs or labels, never raw passwords
+- current cross-origin Pages -> Worker traffic is restricted by explicit CORS allowlist to the Pages production origin and local dev origins only
 
 ## Optional Features
 

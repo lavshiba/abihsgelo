@@ -8,6 +8,12 @@
 - Analytics Engine stores event streams and creates the bound dataset automatically on first write.
 - GitHub Actions builds `snapshot.json` as stale-safe fallback data.
 
+Current deployed topology:
+- `https://abihsgelo.pages.dev` serves the frontend
+- `https://abihsgelo.shiaboi.workers.dev` serves the Worker API
+
+This temporary split exists because the account currently has no Cloudflare zone configured for same-origin Worker routes.
+
 ## Request Flow
 
 1. Browser loads Pages shell.

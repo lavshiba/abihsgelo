@@ -22,37 +22,50 @@ export default {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
     const method = request.method.toUpperCase();
+    const corsHeaders = buildCorsHeaders(request, env);
 
     try {
+      if (method === "OPTIONS") {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            ...SECURITY_HEADERS,
+            ...corsHeaders,
+            "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
+            "Access-Control-Allow-Headers": "Authorization,Content-Type"
+          }
+        });
+      }
+
       if (url.pathname === "/healthz") {
-        return json({ ok: true, service: "abihsgelo" });
+        return json({ ok: true, service: "abihsgelo" }, 200, corsHeaders);
       }
 
       if (url.pathname === "/api/bootstrap" && method === "GET") {
-        return json(await getBootstrap(env));
+        return json(await getBootstrap(env), 200, corsHeaders);
       }
 
       if (url.pathname === "/api/bootstrap" && method === "POST") {
         const body = await safeJson(request);
         const metadata = (body.metadata as Record<string, unknown> | undefined) ?? {};
         ctx.waitUntil(addAudit(env, String(body.eventType ?? "site_open"), "client", metadata));
-        return json({ ok: true });
+        return json({ ok: true }, 200, corsHeaders);
       }
 
       if (url.pathname === "/api/auth/enter" && method === "POST") {
         const limit = enforceRateLimit(request, "auth", 8, 5 * 60_000);
         if (!limit.ok) {
-          return json({ ok: false }, 429);
+          return json({ ok: false }, 429, corsHeaders);
         }
 
         const body = await safeJson(request);
         const result = await authenticate(env, String(body.password ?? ""));
-        return json(result);
+        return json(result, 200, corsHeaders);
       }
 
       if (url.pathname.startsWith("/api/modes/") && method === "GET") {
         const modeId = url.pathname.replace("/api/modes/", "");
-        return json(await getModePayload(request, env, modeId));
+        return json(await getModePayload(request, env, modeId), 200, corsHeaders);
       }
 
       if (url.pathname === "/api/admin/bootstrap" && method === "GET") {
@@ -78,7 +91,7 @@ export default {
             ).all<AdminPayload["audit"][number]>()
           ).results
         };
-        return json(payload);
+        return json(payload, 200, corsHeaders);
       }
 
       if (url.pathname === "/api/admin/access-rules" && method === "POST") {
@@ -88,7 +101,7 @@ export default {
         }
         const body = await safeJson(request);
         await createAccessRule(env, body);
-        return json({ ok: true });
+        return json({ ok: true }, 200, corsHeaders);
       }
 
       if (url.pathname.startsWith("/api/admin/access-rules/") && method === "PUT") {
@@ -97,7 +110,7 @@ export default {
           return session.response;
         }
         await updateAccessRule(env, url.pathname.split("/").pop() ?? "", await safeJson(request));
-        return json({ ok: true });
+        return json({ ok: true }, 200, corsHeaders);
       }
 
       if (url.pathname.startsWith("/api/admin/modes/") && method === "PUT") {
@@ -106,7 +119,7 @@ export default {
           return session.response;
         }
         await updateMode(env, url.pathname.split("/").pop() ?? "", await safeJson(request));
-        return json({ ok: true });
+        return json({ ok: true }, 200, corsHeaders);
       }
 
       if (url.pathname.startsWith("/api/admin/wallets/") && method === "PUT") {
@@ -115,7 +128,7 @@ export default {
           return session.response;
         }
         await updateWallet(env, url.pathname.split("/").pop() ?? "", await safeJson(request));
-        return json({ ok: true });
+        return json({ ok: true }, 200, corsHeaders);
       }
 
       if (url.pathname === "/api/admin/settings" && method === "PUT") {
@@ -125,7 +138,7 @@ export default {
         }
         const body = await safeJson(request);
         await Promise.all(Object.entries(body).map(([key, value]) => setSetting(env, key, value)));
-        return json({ ok: true });
+        return json({ ok: true }, 200, corsHeaders);
       }
 
       if (url.pathname === "/api/admin/refresh-now" && method === "POST") {
@@ -134,7 +147,7 @@ export default {
           return session.response;
         }
         await refreshProxyState(env);
-        return json({ ok: true });
+        return json({ ok: true }, 200, corsHeaders);
       }
 
       if (url.pathname === "/api/admin/lock-now" && method === "POST") {
@@ -152,7 +165,7 @@ export default {
         if (!session.ok) {
           return session.response;
         }
-        return exportJson(env, url.searchParams.get("kind") ?? "");
+        return exportJson(env, url.searchParams.get("kind") ?? "", corsHeaders);
       }
 
       if (url.pathname === "/api/admin/import" && method === "POST") {
@@ -161,12 +174,12 @@ export default {
           return session.response;
         }
         await importJson(env, url.searchParams.get("kind") ?? "", await request.json());
-        return json({ ok: true });
+        return json({ ok: true }, 200, corsHeaders);
       }
 
-      return json({ ok: false, error: "not_found" }, 404);
+      return json({ ok: false, error: "not_found" }, 404, corsHeaders);
     } catch {
-      return json({ ok: false }, 500);
+      return json({ ok: false }, 500, corsHeaders);
     }
   },
 
@@ -307,13 +320,14 @@ function bearerToken(request: Request): string | null {
   return value.slice(7);
 }
 
-function json(payload: unknown, status = 200): Response {
+function json(payload: unknown, status = 200, extraHeaders: HeadersInit = {}): Response {
   return new Response(JSON.stringify(payload), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
-      ...SECURITY_HEADERS
+      ...SECURITY_HEADERS,
+      ...extraHeaders
     }
   });
 }
@@ -416,16 +430,35 @@ async function getHealth(env: Env): Promise<Record<string, unknown>> {
   };
 }
 
-async function exportJson(env: Env, kind: string): Promise<Response> {
+async function exportJson(env: Env, kind: string, extraHeaders: HeadersInit = {}): Promise<Response> {
   const table = kind === "wallets" ? "wallets" : kind === "site_settings" ? "site_settings" : "access_rules";
   const rows = (await env.DB.prepare(`SELECT * FROM ${table}`).all()).results;
   return new Response(JSON.stringify(rows, null, 2), {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
-      ...SECURITY_HEADERS
+      ...SECURITY_HEADERS,
+      ...extraHeaders
     }
   });
+}
+
+function buildCorsHeaders(request: Request, env: Env): HeadersInit {
+  const origin = request.headers.get("Origin");
+  if (!origin) {
+    return {};
+  }
+
+  const allowedOrigins = new Set([env.SITE_ORIGIN, "http://127.0.0.1:5173", "http://localhost:5173"]);
+  if (!allowedOrigins.has(origin)) {
+    return {};
+  }
+
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Credentials": "false",
+    Vary: "Origin"
+  };
 }
 
 async function importJson(env: Env, kind: string, body: unknown): Promise<void> {

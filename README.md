@@ -96,7 +96,13 @@ Pages settings:
 - Build output directory: `frontend/dist`
 - Node version: `22+`
 
-7. Add a route so the Worker handles `/api/*` and `/healthz` on the same public domain, or add a same-origin Pages proxy layer if you decide to keep API traffic off a public workers.dev hostname.
+7. If you have a Cloudflare zone, add a route so the Worker handles `/api/*` and `/healthz` on the same public domain.
+
+Current live fallback for this repository:
+- Pages shell: `https://abihsgelo.pages.dev`
+- Worker API: `https://abihsgelo.shiaboi.workers.dev`
+
+This cross-origin setup is used only because the account currently has no Cloudflare zone to attach routes to.
 
 If Cloudflare refuses the exact public name `abihsgelo`, stop and resolve that first instead of renaming in code.
 
