@@ -1,0 +1,382 @@
+:root {
+  color-scheme: dark;
+  --bg: #16181d;
+  --bg-elevated: #1f232b;
+  --bg-deep: #14161a;
+  --text: rgba(255, 255, 255, 0.82);
+  --text-soft: rgba(255, 255, 255, 0.64);
+  --text-quiet: rgba(255, 255, 255, 0.42);
+  --border: rgba(255, 255, 255, 0.1);
+  --glow: rgba(255, 255, 255, 0.12);
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  background: radial-gradient(circle at top, #20242b, var(--bg) 45%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+a,
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.scene-root {
+  height: 100%;
+  width: 100%;
+}
+
+.home-shell,
+.password-shell,
+.proxies-shell,
+.admin-shell {
+  height: 100%;
+}
+
+.home-shell {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  align-items: start;
+  padding: 48px 20px 28px;
+  text-align: center;
+}
+
+.home-top-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.home-title,
+.home-year,
+.donate-label,
+.status-line,
+.stale-line {
+  margin: 0;
+}
+
+.home-title {
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+  color: var(--text-soft);
+}
+
+.home-year {
+  font-size: 0.82rem;
+  color: var(--text-quiet);
+}
+
+.tg-button {
+  display: inline-flex;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  text-decoration: none;
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.tg-button:active,
+.wallet-pill:active,
+.archive-trigger:active,
+.proxy-card:active,
+.archive-card:active {
+  transform: translateY(1px) scale(0.985);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.home-empty-plane {
+  min-height: 10vh;
+}
+
+.donate-block {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+  align-self: end;
+}
+
+.donate-label {
+  color: var(--text-soft);
+  font-size: 0.88rem;
+}
+
+.pill-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.wallet-pill,
+.archive-trigger,
+.admin-shell button,
+.export-link {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 10px 16px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.password-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.password-block {
+  width: min(92vw, 1080px);
+  min-height: 70vh;
+  outline: none;
+  display: grid;
+  place-items: center;
+}
+
+.center-cursor,
+.tail-cursor {
+  display: inline-block;
+  width: 0.2em;
+  height: 1.1em;
+  background: rgba(255, 255, 255, 0.88);
+  animation: blink 1.2s step-end infinite;
+}
+
+.password-lines {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.02em;
+}
+
+.password-line {
+  margin: 0;
+  font-family: "Space Grotesk", "Manrope", sans-serif;
+  font-size: clamp(3rem, 10vw, 8rem);
+  letter-spacing: -0.06em;
+  line-height: 0.88;
+  text-transform: uppercase;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+.proxies-shell {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 18px;
+  padding: 12vh 20px 36px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.proxies-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.proxies-stack h1 {
+  margin: 0;
+  font-size: clamp(1.15rem, 3vw, 1.6rem);
+}
+
+.status-line {
+  color: var(--text-soft);
+}
+
+.stale-line {
+  color: var(--text-quiet);
+  font-size: 0.88rem;
+}
+
+.fresh-grid {
+  width: min(92vw, 760px);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.proxy-card,
+.archive-card {
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  text-decoration: none;
+  color: var(--text);
+  min-height: 132px;
+  padding: 14px 10px;
+}
+
+.proxy-card strong {
+  font-size: clamp(1.4rem, 4vw, 2rem);
+}
+
+.proxy-card span {
+  font-size: 0.9rem;
+  color: var(--text-soft);
+}
+
+.archive-zone {
+  width: min(92vw, 760px);
+  display: grid;
+  gap: 12px;
+}
+
+.archive-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.archive-card {
+  min-height: 64px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-soft);
+}
+
+.wallet-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(9, 10, 12, 0.68);
+  backdrop-filter: blur(10px);
+  padding: 20px;
+}
+
+.wallet-card,
+.admin-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  padding: 22px;
+}
+
+.wallet-card {
+  width: min(92vw, 360px);
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+}
+
+.wallet-card h2,
+.admin-card h2 {
+  margin: 0;
+}
+
+.wallet-card img {
+  width: 180px;
+  height: 180px;
+  border-radius: 16px;
+  background: white;
+}
+
+.wallet-card code {
+  text-align: center;
+  word-break: break-all;
+  color: var(--text-soft);
+}
+
+.admin-shell {
+  overflow-y: auto;
+  padding: 32px 20px 64px;
+  display: grid;
+  gap: 18px;
+  justify-content: center;
+}
+
+.admin-card {
+  width: min(92vw, 960px);
+  display: grid;
+  gap: 16px;
+}
+
+.admin-list,
+.admin-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-list p {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.admin-form-row label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 0.92rem;
+}
+
+.admin-form-row input,
+.admin-form-row select {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+
+.danger {
+  background: rgba(181, 66, 66, 0.2);
+}
+
+@media (min-width: 920px) {
+  .archive-grid {
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+  }
+
+  .proxy-card {
+    min-height: 160px;
+  }
+}

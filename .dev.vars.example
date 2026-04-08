@@ -1,0 +1,5 @@
+PEPPER=replace-with-long-random-pepper
+SESSION_SECRET=replace-with-long-random-session-secret
+TURNSTILE_SECRET=
+ADMIN_BOOTSTRAP_PASSWORD=
+SITE_ORIGIN=http://127.0.0.1:5173

@@ -1,0 +1,50 @@
+{
+  "name": "abihsgelo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "frontend",
+    "worker",
+    "shared"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "concurrently -n frontend,worker -c cyan,green \"npm run dev:frontend\" \"npm run dev:worker\"",
+    "dev:frontend": "vite --config vite.config.ts",
+    "dev:worker": "npx wrangler dev --config wrangler.toml --local --port 8787",
+    "build": "npm run build:shared && npm run build:frontend && npm run build:worker && npm run snapshot:update",
+    "build:shared": "tsc -p shared/tsconfig.json",
+    "build:frontend": "vite build --config vite.config.ts",
+    "build:worker": "tsc -p worker/tsconfig.json",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "db:migrate": "npx wrangler d1 migrations apply DB --config wrangler.toml --local",
+    "db:seed": "npx wrangler d1 execute DB --config wrangler.toml --local --file worker/migrations/0002_seed.sql",
+    "deploy": "npm run lint && npm run typecheck && npm run test && npm run build && npx wrangler deploy --config wrangler.toml",
+    "snapshot:update": "node scripts/snapshot-update.mjs",
+    "health:check": "node scripts/health-check.mjs",
+    "smoke": "node scripts/smoke-check.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260402.0",
+    "@eslint/js": "^9.38.0",
+    "@types/node": "^24.7.2",
+    "@typescript-eslint/eslint-plugin": "^8.46.1",
+    "@typescript-eslint/parser": "^8.46.1",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.38.0",
+    "eslint-plugin-import": "^2.32.0",
+    "globals": "^16.4.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.10",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.0.1",
+    "qrcode": "^1.5.4"
+  }
+}
