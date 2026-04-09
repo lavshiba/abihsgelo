@@ -870,11 +870,12 @@ export class AppController {
     const wrap = document.createElement("div");
     wrap.className = "admin-guide-grid";
 
-    const proxiesRuleExists = payload.accessRules.some((rule) => !rule.softDeletedAt && rule.isEnabled && rule.targetMode === "proxies_mode");
+    const proxiesRules = payload.accessRules.filter((rule) => !rule.softDeletedAt && rule.targetMode === "proxies_mode");
+    const activeProxyRule = proxiesRules.find((rule) => rule.isEnabled);
     wrap.innerHTML = `
       <article class="admin-guide-card">
         <h3>Если хотите открыть вход в прокси</h3>
-        <p>${proxiesRuleExists ? "Пароль для proxies_mode уже существует. Его можно поменять или отключить ниже в блоке правил доступа." : "Сейчас активного пароля для proxies_mode нет. Ниже в блоке правил доступа создайте новое правило и выберите режим «Прокси»."}</p>
+        <p>${activeProxyRule ? `Сейчас для прокси уже есть активное правило: «${this.escapeHtml(activeProxyRule.label)}». Ниже можно быстро создать новый пароль для прокси или отредактировать существующие правила.` : "Сейчас активного пароля для proxies_mode нет. Ниже можно сразу создать пароль для прокси в упрощенной форме."}</p>
       </article>
       <article class="admin-guide-card">
         <h3>Если хотите срочно закрыть доступ</h3>
@@ -885,6 +886,41 @@ export class AppController {
         <p>Переключите видимость donate в блоке «Donate и кошельки». Там же меняются адреса кошельков.</p>
       </article>
     `;
+
+    const quickProxy = document.createElement("form");
+    quickProxy.className = "admin-form-row admin-form-card admin-create-card admin-quick-create";
+    quickProxy.innerHTML = `
+      <div class="admin-form-heading">
+        <strong>Быстро создать пароль для прокси</strong>
+        <p>Самый простой путь: введите пароль и сохраните. Это сразу создаст новое активное правило для режима «Прокси».</p>
+      </div>
+      <label>Название правила
+        <input name="label" value="доступ в прокси" />
+      </label>
+      <label>Пароль для входа в прокси
+        <input name="password" required />
+      </label>
+      <label>Комментарий
+        <input name="notes" placeholder="необязательно" />
+      </label>
+      <button type="submit">Создать пароль для прокси</button>
+    `;
+    quickProxy.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const form = new FormData(quickProxy);
+      void this.fetchJson(this.apiUrl("/api/admin/access-rules"), {
+        method: "POST",
+        headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: String(form.get("label") ?? "доступ в прокси"),
+          targetMode: "proxies_mode",
+          priority: 100,
+          password: String(form.get("password") ?? ""),
+          notes: String(form.get("notes") ?? "")
+        })
+      }).then(() => this.render());
+    });
+    wrap.append(quickProxy);
 
     const actions = document.createElement("div");
     actions.className = "admin-actions admin-actions-wide";

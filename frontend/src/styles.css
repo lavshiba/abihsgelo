@@ -885,6 +885,13 @@ a {
   padding: 16px;
 }
 
+.admin-quick-create {
+  grid-column: 1 / -1;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.02);
+}
+
 .admin-form-row:hover {
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.08);
