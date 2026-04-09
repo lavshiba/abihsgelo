@@ -403,7 +403,7 @@ export class AppController {
         return;
       }
 
-      if (event.key === "Enter") {
+      if (event.key === "Enter" || event.key === "Go" || event.key === "Done" || event.key === "Send") {
         event.preventDefault();
         this.syncPasswordBufferFromInput(false);
         this.tryPasswordSubmit();
@@ -419,7 +419,7 @@ export class AppController {
         return;
       }
 
-      if (inputEvent.inputType === "insertLineBreak") {
+      if (inputEvent.inputType === "insertLineBreak" || inputEvent.inputType === "insertParagraph") {
         event.preventDefault();
         this.syncPasswordBufferFromInput(false);
         this.tryPasswordSubmit();
@@ -634,34 +634,32 @@ export class AppController {
       this.passwordVisualState = "success";
       this.syncPasswordSceneVisuals();
 
-      this.pushTransition(() => {
-        this.session = { mode: result.mode ?? null, token: result.token ?? null };
-        this.passwordBuffer = "";
-        this.scene = "mode";
-        this.panelClosing = false;
-        this.passwordSubmitPending = false;
-        this.passwordInput?.remove();
-        if (result.mode === "proxies_mode") {
-          this.archiveOpen = false;
-          this.pendingScrollTarget = "fresh";
-          const fallback = this.buildProxyFallbackPayload();
-          this.currentProxiesPayload = fallback.fresh.length > 0 || fallback.archive.length > 0 ? fallback : null;
-          this.proxiesLoadState = this.currentProxiesPayload ? "ready" : "loading";
-          this.proxiesLoading = false;
-        }
-        if (result.mode === "admin_mode") {
-          this.adminError = null;
-          this.adminPayload = null;
-          this.adminLoading = false;
-        }
-        this.render();
-        if (result.mode === "proxies_mode") {
-          void this.ensureProxiesPayload(true);
-        }
-        if (result.mode === "admin_mode") {
-          void this.ensureAdminPayload(true);
-        }
-      }, 36);
+      this.session = { mode: result.mode ?? null, token: result.token ?? null };
+      this.passwordBuffer = "";
+      this.scene = "mode";
+      this.panelClosing = false;
+      this.passwordSubmitPending = false;
+      this.passwordInput?.remove();
+      if (result.mode === "proxies_mode") {
+        this.archiveOpen = false;
+        this.pendingScrollTarget = "fresh";
+        const fallback = this.buildProxyFallbackPayload();
+        this.currentProxiesPayload = fallback.fresh.length > 0 || fallback.archive.length > 0 ? fallback : null;
+        this.proxiesLoadState = this.currentProxiesPayload ? "ready" : "loading";
+        this.proxiesLoading = false;
+      }
+      if (result.mode === "admin_mode") {
+        this.adminError = null;
+        this.adminPayload = null;
+        this.adminLoading = false;
+      }
+      this.render();
+      if (result.mode === "proxies_mode") {
+        void this.ensureProxiesPayload(true);
+      }
+      if (result.mode === "admin_mode") {
+        void this.ensureAdminPayload(true);
+      }
     } catch {
       window.clearTimeout(requestTimeout);
       this.passwordSubmitPending = false;
