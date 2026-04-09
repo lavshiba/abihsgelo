@@ -48,6 +48,14 @@ If D1 is empty and `ADMIN_BOOTSTRAP_PASSWORD` is missing:
 - `npm run smoke` must fail loudly
 - deploy pipelines must fail before a silent lockout reaches production
 
+## Password Entry Verification
+
+When validating a release, verify both:
+- desktop hidden entry submit with `Enter`
+- mobile-like hidden entry submit with `enter/done/go` behavior
+
+The implementation uses an invisible focused text control behind the typographic monolith, so regressions usually show up as keyboard-submit failures rather than visual breakage.
+
 ## Panic Mode
 
 Panic mode is a site setting. When enabled:

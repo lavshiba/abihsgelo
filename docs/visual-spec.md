@@ -72,6 +72,7 @@ Rules:
 3. only then a thick slower-blinking cursor appears at the center
 4. no input field box and no hint text
 5. no visible labels, helper copy, submit button, or back button
+6. hidden input layer may use an invisible focused text control for desktop/mobile keyboard capture, but it must stay fully visually absent
 
 ## Password Mode
 
@@ -94,6 +95,7 @@ Rules:
 - cursor stays at the end of the last line
 - letter spacing stays tight; word spacing is wider than letter spacing
 - the block should read as a fullscreen typographic lockup
+- mobile keyboard `enter/done/go` actions must submit as reliably as desktop enter
 - on enter:
   - success: block equalizes, soft blur, births target mode
   - fail: soft faster dissolve back to home
@@ -148,3 +150,6 @@ Archive:
 - live proxy update reflows the grid rather than flashing
 - when archive is open, live updates queue quietly and apply only after the view returns to fresh
 - newest incoming top-left card gets only a very thin, short accent
+- proxies title and status appear softly before the grid fully settles
+- fresh cards arrive row-by-row
+- press targets give a clear soft graphite press response

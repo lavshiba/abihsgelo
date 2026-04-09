@@ -49,6 +49,11 @@ export class AppController {
   private passwordBuffer = "";
   private passwordVisualState: PasswordVisualState = "cursor";
   private passwordTimeoutHandle: number | null = null;
+  private passwordInput: HTMLTextAreaElement | null = null;
+  private passwordVisual: HTMLDivElement | null = null;
+  private passwordCompositionActive = false;
+  private passwordFocusHandles: number[] = [];
+  private passwordSubmitPending = false;
   private transitionHandles: number[] = [];
   private walletOverlay: WalletEntry | null = null;
   private copiedWalletId: string | null = null;
@@ -88,6 +93,8 @@ export class AppController {
   }
 
   private render(): void {
+    this.passwordInput = null;
+    this.passwordVisual = null;
     this.root.innerHTML = "";
     this.root.className = `scene-root scene-${this.scene}${this.homeDissolving ? " scene-home-dissolving" : ""}`;
 
@@ -117,9 +124,7 @@ export class AppController {
 
   private handlePostRender(): void {
     if (this.scene === "password") {
-      queueMicrotask(() => {
-        this.root.querySelector<HTMLInputElement>(".password-hidden-input")?.focus();
-      });
+      this.schedulePasswordFocus();
     }
 
     if (!this.pendingScrollTarget) {
@@ -224,25 +229,35 @@ export class AppController {
     const shell = document.createElement("main");
     shell.className = `password-shell password-state-${this.passwordVisualState}`;
     shell.addEventListener("click", () => {
-      shell.querySelector<HTMLInputElement>(".password-hidden-input")?.focus();
+      this.schedulePasswordFocus(true);
     });
 
     const stage = document.createElement("section");
     stage.className = "password-stage";
-    stage.innerHTML = this.renderPasswordStage();
+    const visual = document.createElement("div");
+    visual.className = "password-visual-layer";
+    visual.innerHTML = this.renderPasswordStage();
+    this.passwordVisual = visual;
 
-    const input = document.createElement("input");
+    const input = document.createElement("textarea");
     input.className = "password-hidden-input";
-    input.type = "text";
     input.inputMode = "text";
+    input.enterKeyHint = "go";
     input.autocomplete = "off";
     input.autocapitalize = "none";
     input.autocorrect = "off";
     input.spellcheck = false;
+    input.rows = 1;
+    input.wrap = "off";
     input.value = this.passwordBuffer;
     input.setAttribute("aria-label", "password");
+    this.passwordInput = input;
 
     input.addEventListener("keydown", (event) => {
+      if (event.isComposing || this.passwordCompositionActive) {
+        return;
+      }
+
       if (event.key === "Escape") {
         event.preventDefault();
         this.leavePasswordScene("fail");
@@ -251,23 +266,50 @@ export class AppController {
 
       if (event.key === "Enter") {
         event.preventDefault();
-        if (this.passwordBuffer.trim()) {
-          void this.submitPassword();
-        }
+        this.tryPasswordSubmit();
         return;
       }
 
       this.resetPasswordTimeout();
     });
 
-    input.addEventListener("input", (event) => {
-      this.passwordBuffer = (event.currentTarget as HTMLInputElement).value;
-      this.passwordVisualState = this.passwordBuffer ? "typing" : "cursor";
-      this.render();
-      this.resetPasswordTimeout();
+    input.addEventListener("beforeinput", (event) => {
+      const inputEvent = event as InputEvent;
+      if (inputEvent.isComposing || this.passwordCompositionActive) {
+        return;
+      }
+
+      if (inputEvent.inputType === "insertLineBreak") {
+        event.preventDefault();
+        this.tryPasswordSubmit();
+      }
     });
 
-    stage.append(input);
+    input.addEventListener("compositionstart", () => {
+      this.passwordCompositionActive = true;
+    });
+
+    input.addEventListener("compositionend", () => {
+      this.passwordCompositionActive = false;
+      this.syncPasswordBufferFromInput(false);
+    });
+
+    input.addEventListener("input", () => {
+      if (this.passwordCompositionActive) {
+        this.syncPasswordBufferFromInput(false);
+        return;
+      }
+
+      this.syncPasswordBufferFromInput(true);
+    });
+
+    input.addEventListener("blur", () => {
+      if (this.scene === "password") {
+        this.schedulePasswordFocus();
+      }
+    });
+
+    stage.append(visual, input);
     shell.append(stage);
     return shell;
   }
@@ -378,6 +420,13 @@ export class AppController {
       this.passwordTimeoutHandle = null;
     }
 
+    this.passwordCompositionActive = false;
+
+    for (const handle of this.passwordFocusHandles) {
+      window.clearTimeout(handle);
+    }
+    this.passwordFocusHandles = [];
+
     for (const handle of this.transitionHandles) {
       window.clearTimeout(handle);
     }
@@ -395,17 +444,23 @@ export class AppController {
   private leavePasswordScene(reason: "fail" | "timeout"): void {
     this.clearPasswordFlow();
     this.passwordVisualState = reason;
-    this.render();
+    this.syncPasswordSceneVisuals();
 
     this.pushTransition(() => {
       this.passwordBuffer = "";
       this.scene = "home";
       this.passwordVisualState = "cursor";
+      this.passwordSubmitPending = false;
       this.render();
     }, reason === "fail" ? 180 : 220);
   }
 
   private async submitPassword(): Promise<void> {
+    if (this.passwordSubmitPending) {
+      return;
+    }
+
+    this.passwordSubmitPending = true;
     this.clearPasswordFlow();
     this.resetPasswordTimeout();
 
@@ -417,18 +472,20 @@ export class AppController {
       });
 
       if (!result.ok || !result.mode || !result.token) {
+        this.passwordSubmitPending = false;
         this.leavePasswordScene("fail");
         return;
       }
 
       this.clearPasswordFlow();
       this.passwordVisualState = "success";
-      this.render();
+      this.syncPasswordSceneVisuals();
 
       this.pushTransition(() => {
         this.session = { mode: result.mode ?? null, token: result.token ?? null };
         this.passwordBuffer = "";
         this.scene = "mode";
+        this.passwordSubmitPending = false;
         if (result.mode === "proxies_mode") {
           this.archiveOpen = false;
           this.pendingScrollTarget = "fresh";
@@ -437,6 +494,7 @@ export class AppController {
         this.render();
       }, 320);
     } catch {
+      this.passwordSubmitPending = false;
       this.leavePasswordScene("timeout");
     }
   }
@@ -483,11 +541,13 @@ export class AppController {
     items.slice(0, 9).forEach((item, index) => {
       const card = document.createElement("button");
       const placement = this.freshPlacement(count, index);
+      const rowIndex = placement.row - 1;
       const date = new Date(item.postedAt);
       card.type = "button";
       card.className = `proxy-card${this.highlightProxyId === item.id ? " is-accented" : ""}`;
       card.style.gridColumn = `${placement.column} / span 2`;
       card.style.gridRow = String(placement.row);
+      card.style.animationDelay = `${90 + rowIndex * 80}ms`;
       card.innerHTML = `
         <strong>#${item.proxyNumber}</strong>
         <span>${date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
@@ -521,6 +581,7 @@ export class AppController {
   private renderArchive(items: ProxyItem[]): HTMLElement {
     const section = document.createElement("section");
     section.className = `archive-zone${this.archiveOpen ? " is-open" : ""}`;
+    section.style.animationDelay = "240ms";
 
     const trigger = document.createElement("button");
     trigger.type = "button";
@@ -1120,5 +1181,75 @@ export class AppController {
     const hours = String(date.getHours()).padStart(2, "0");
     const minutes = String(date.getMinutes()).padStart(2, "0");
     return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
+  private schedulePasswordFocus(force = false): void {
+    if (this.scene !== "password") {
+      return;
+    }
+
+    const focusDelays = force ? [0, 60, 180, 420] : [0, 120, 320];
+    for (const delay of focusDelays) {
+      const handle = window.setTimeout(() => {
+        this.passwordFocusHandles = this.passwordFocusHandles.filter((value) => value !== handle);
+        if (this.scene !== "password") {
+          return;
+        }
+        const input = this.passwordInput ?? this.root.querySelector<HTMLTextAreaElement>(".password-hidden-input");
+        if (!input) {
+          return;
+        }
+        input.focus({ preventScroll: true });
+        const length = input.value.length;
+        input.setSelectionRange(length, length);
+      }, delay);
+      this.passwordFocusHandles.push(handle);
+    }
+  }
+
+  private syncPasswordBufferFromInput(allowSubmitFromLineBreak: boolean): void {
+    const input = this.passwordInput;
+    if (!input) {
+      return;
+    }
+
+    const rawValue = input.value;
+    const hadLineBreak = /[\r\n]/.test(rawValue);
+    const nextValue = rawValue.replace(/[\r\n]+/g, "");
+    if (hadLineBreak) {
+      input.value = nextValue;
+    }
+
+    this.passwordBuffer = nextValue;
+    this.passwordVisualState = nextValue ? "typing" : "cursor";
+    this.syncPasswordSceneVisuals();
+    this.resetPasswordTimeout();
+
+    if (allowSubmitFromLineBreak && hadLineBreak) {
+      this.tryPasswordSubmit();
+    }
+  }
+
+  private syncPasswordSceneVisuals(): void {
+    if (this.scene !== "password") {
+      return;
+    }
+
+    const shell = this.root.querySelector<HTMLElement>(".password-shell");
+    if (shell) {
+      shell.className = `password-shell password-state-${this.passwordVisualState}`;
+    }
+
+    if (this.passwordVisual) {
+      this.passwordVisual.innerHTML = this.renderPasswordStage();
+    }
+  }
+
+  private tryPasswordSubmit(): void {
+    if (!this.passwordBuffer.trim() || this.passwordCompositionActive || this.passwordSubmitPending) {
+      return;
+    }
+
+    void this.submitPassword();
   }
 }

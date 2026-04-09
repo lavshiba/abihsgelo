@@ -13,6 +13,14 @@ Production bootstrap path:
 
 This bootstrap path is required to prevent the deadlock where `admin_mode` is locked but `access_rules` is empty.
 
+## UI Notes
+
+`admin_mode` stays utilitarian, but the panel should still feel calm and readable:
+- clear panel rhythm
+- readable grouped controls
+- no default browser-form look
+- same graphite visual world as the rest of the site
+
 ## What It Can Do
 
 - view access rules

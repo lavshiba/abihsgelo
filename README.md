@@ -142,6 +142,14 @@ Production secrets to set in Cloudflare Worker:
 7. Create any additional rules you need for future modes.
 8. Rotate, disable, archive, or replace the bootstrap admin rule from hidden admin as needed.
 
+## Hidden Password Input
+
+The hidden password scene keeps its invisible input model in production:
+- no visible field or buttons are shown
+- an invisible focused text control captures keyboard input for the typographic monolith
+- desktop `Enter` and mobile `enter/done/go` actions are both treated as submit paths
+- mobile line-break insertion in the hidden control is normalized into submit instead of leaving a visible form artifact
+
 ## Scripts
 
 - `npm run dev`: frontend + local Worker
