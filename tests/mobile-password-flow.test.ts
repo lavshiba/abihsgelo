@@ -26,6 +26,39 @@ describe("password flow", () => {
     vi.restoreAllMocks();
   });
 
+  it("renders home scene immediately without waiting for bootstrap requests", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith("/snapshot.json")) {
+        await new Promise((resolve) => window.setTimeout(resolve, 3000));
+        return new Response(JSON.stringify({ fresh: [], archive: [] }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && (!init?.method || init.method === "GET")) {
+        await new Promise((resolve) => window.setTimeout(resolve, 3000));
+        return new Response(JSON.stringify(bootstrapPayload), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = new AppController(document.querySelector("#app") as HTMLDivElement);
+    const startPromise = app.start();
+
+    expect(document.querySelector(".home-shell")).toBeTruthy();
+    expect(document.querySelector(".donate-block")).toBeTruthy();
+
+    await vi.advanceTimersByTimeAsync(3100);
+    await startPromise;
+  });
+
   it("submits on mobile insertLineBreak action", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

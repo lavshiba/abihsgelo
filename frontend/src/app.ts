@@ -85,11 +85,31 @@ export class AppController {
   }
 
   public async start(): Promise<void> {
-    this.snapshot = await this.loadSnapshot();
-    this.bootstrap = await this.fetchJson<BootstrapPayload>(this.apiUrl("/api/bootstrap")).catch(() => FALLBACK_BOOTSTRAP);
     this.installPasswordGlobalHandlers();
-    void this.track("site_open");
     this.render();
+    void this.hydrateBootstrapState();
+    void this.track("site_open");
+  }
+
+  private async hydrateBootstrapState(): Promise<void> {
+    const [snapshot, bootstrap] = await Promise.allSettled([
+      this.loadSnapshot(),
+      this.fetchJson<BootstrapPayload>(this.apiUrl("/api/bootstrap"))
+    ]);
+
+    if (snapshot.status === "fulfilled") {
+      this.snapshot = snapshot.value;
+    }
+
+    if (bootstrap.status === "fulfilled") {
+      this.bootstrap = bootstrap.value;
+    } else {
+      this.bootstrap = FALLBACK_BOOTSTRAP;
+    }
+
+    if (this.scene === "home") {
+      this.render();
+    }
   }
 
   private async loadSnapshot(): Promise<{ fresh: ProxyItem[]; archive: ProxyItem[] }> {
