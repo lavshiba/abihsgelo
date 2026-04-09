@@ -220,7 +220,7 @@ a {
   height: 100%;
   display: grid;
   place-items: center;
-  padding: 5vh 5vw;
+  padding: 1.6vh 1.9vw;
 }
 
 .password-visual-layer {
@@ -255,17 +255,18 @@ a {
 
 .password-monolith {
   width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(0.02rem, 0.5vw, 0.18rem);
+  align-items: stretch;
+  justify-content: space-evenly;
+  gap: clamp(0.01rem, 0.18vw, 0.08rem);
   font-family: "Space Grotesk", "Manrope", sans-serif;
-  font-weight: 800;
+  font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: -0.1em;
-  line-height: 0.8;
-  text-shadow: 0 0 0.02em rgba(255, 255, 255, 0.32);
+  letter-spacing: -0.12em;
+  line-height: 0.72;
+  text-shadow: 0 0 0.03em rgba(255, 255, 255, 0.4);
   transition: opacity 220ms ease, filter 220ms ease, transform 220ms ease;
   animation: monolith-arrive 260ms ease both;
 }
@@ -302,7 +303,9 @@ a {
 .password-row {
   margin: 0;
   display: flex;
-  align-items: baseline;
+  flex: 1 1 auto;
+  width: 100%;
+  align-items: center;
   justify-content: center;
   gap: 0.01em;
   animation: password-row-settle 220ms ease both;
@@ -314,27 +317,31 @@ a {
 }
 
 .glyph-space {
-  min-width: 0.46em;
+  min-width: 0.58em;
 }
 
 .password-monolith[data-size="single"] {
-  font-size: min(78vw, 78vh);
+  font-size: min(95vw, 95vh);
 }
 
 .password-monolith[data-size="double"] {
-  font-size: min(42vw, 42vh);
+  font-size: min(49vw, 88vh);
 }
 
 .password-monolith[data-size="giant"] {
-  font-size: min(24vw, 26vh);
+  font-size: min(33vw, 36vh);
 }
 
 .password-monolith[data-size="dense"] {
-  font-size: min(16vw, 18vh);
+  font-size: min(24vw, 25vh);
 }
 
 .password-monolith[data-size="compact"] {
-  font-size: min(11vw, 13.5vh);
+  font-size: min(18vw, 18.5vh);
+}
+
+.password-monolith[data-size="packed"] {
+  font-size: min(13vw, 13.8vh);
 }
 
 .cursor-shell {
@@ -431,8 +438,8 @@ a {
   display: grid;
   align-content: start;
   justify-items: center;
-  gap: 18px;
-  padding: 7.2vh 16px 26px;
+  gap: 14px;
+  padding: 5.2vh 14px 22px;
   overflow-y: auto;
   scrollbar-width: none;
   scroll-behavior: smooth;
@@ -453,11 +460,11 @@ a {
 .panel-frame {
   width: min(92vw, 760px);
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .panel-frame-proxies {
-  width: min(92vw, 720px);
+  width: min(92vw, 690px);
 }
 
 .panel-chrome {
@@ -551,9 +558,9 @@ a {
 
 .proxies-status-card {
   display: grid;
-  gap: 6px;
-  padding: 14px 16px;
-  border-radius: 22px;
+  gap: 5px;
+  padding: 12px 14px;
+  border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.03);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.015);
@@ -606,8 +613,8 @@ a {
   width: 100%;
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  grid-auto-rows: minmax(108px, 1fr);
-  gap: 8px;
+  grid-auto-rows: minmax(96px, 1fr);
+  gap: 7px;
   align-items: stretch;
   justify-items: stretch;
   transition: opacity 180ms ease, transform 180ms ease;
@@ -623,10 +630,10 @@ a {
   gap: 4px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border);
-  border-radius: 22px;
+  border-radius: 20px;
   color: var(--text);
-  min-height: 116px;
-  padding: 12px 10px;
+  min-height: 104px;
+  padding: 10px 10px;
   cursor: pointer;
   transition: transform 140ms ease, background 140ms ease, border-color 140ms ease, box-shadow 180ms ease, filter 180ms ease;
   animation: card-rise 260ms ease both;
@@ -634,11 +641,11 @@ a {
 }
 
 .proxy-card strong {
-  font-size: clamp(1.24rem, 3.2vw, 1.78rem);
+  font-size: clamp(1.18rem, 3vw, 1.6rem);
 }
 
 .proxy-card span {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   color: var(--text-soft);
 }
 
@@ -662,7 +669,7 @@ a {
 .archive-zone {
   width: 100%;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   padding-bottom: 6px;
   animation: section-arrive 260ms ease both;
   animation-fill-mode: both;
@@ -673,8 +680,8 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 54px;
-  padding: 14px 18px;
+  min-height: 48px;
+  padding: 12px 16px;
   background: rgba(255, 255, 255, 0.045);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
 }
@@ -695,7 +702,7 @@ a {
 
 .archive-grid {
   display: grid;
-  gap: 6px;
+  gap: 5px;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   overflow: hidden;
   max-height: 0;
@@ -713,8 +720,8 @@ a {
 }
 
 .archive-card {
-  min-height: 56px;
-  border-radius: 16px;
+  min-height: 50px;
+  border-radius: 15px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-soft);
   opacity: 0;
@@ -855,9 +862,9 @@ a {
 
 .admin-shell {
   overflow-y: auto;
-  padding: 28px 16px 58px;
+  padding: 22px 14px 54px;
   display: grid;
-  gap: 18px;
+  gap: 14px;
   justify-content: center;
   align-content: start;
   transition: transform 220ms ease, opacity 180ms ease, filter 180ms ease;
@@ -907,7 +914,7 @@ a {
 
 .admin-notice {
   width: min(92vw, 960px);
-  padding: 14px 18px;
+  padding: 12px 16px;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
@@ -928,8 +935,8 @@ a {
 .admin-card {
   width: min(92vw, 960px);
   display: grid;
-  gap: 16px;
-  padding: 20px 20px 18px;
+  gap: 14px;
+  padding: 16px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.03)),
     linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0));
@@ -937,20 +944,10 @@ a {
   animation: section-arrive 260ms ease both;
 }
 
-.admin-lead-grid,
-.admin-control-grid {
+.admin-section-stack {
   width: min(92vw, 960px);
   display: grid;
-  gap: 16px;
-}
-
-.admin-lead-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.admin-control-grid {
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-  align-items: start;
+  gap: 12px;
 }
 
 .admin-card-header {
@@ -967,10 +964,81 @@ a {
   max-width: 46rem;
 }
 
+.admin-section {
+  padding: 0;
+  overflow: hidden;
+}
+
+.admin-section-summary {
+  list-style: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  cursor: pointer;
+}
+
+.admin-section-summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-section-summary-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-section-summary-copy h2,
+.admin-section-summary-copy p {
+  margin: 0;
+}
+
+.admin-section-summary-copy p {
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.admin-section-summary-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-section-meta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+
+.admin-section-arrow {
+  width: 10px;
+  height: 10px;
+  border-right: 1.5px solid rgba(255, 255, 255, 0.75);
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.75);
+  transform: rotate(45deg);
+  transition: transform 180ms ease;
+}
+
+.admin-section[open] .admin-section-arrow {
+  transform: rotate(225deg);
+}
+
+.admin-section-body {
+  display: grid;
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+
 .admin-overview-grid,
 .admin-guide-grid {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
@@ -988,7 +1056,7 @@ a {
 .admin-guide-card,
 .admin-helper,
 .admin-inset-card {
-  padding: 14px;
+  padding: 13px;
 }
 
 .admin-overview-card strong {
@@ -1041,7 +1109,7 @@ a {
 .admin-list,
 .admin-actions {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .admin-list p {
@@ -1066,9 +1134,9 @@ a {
 .admin-form-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
-  gap: 10px;
+  gap: 9px;
   align-items: start;
-  padding: 14px;
+  padding: 12px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -1076,8 +1144,8 @@ a {
 }
 
 .admin-form-card {
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
 }
 
 .admin-loading-card {
@@ -1215,8 +1283,8 @@ a {
 
 .admin-rule-group {
   display: grid;
-  gap: 14px;
-  padding: 14px;
+  gap: 12px;
+  padding: 12px;
 }
 
 .admin-rule-shell {
@@ -1245,8 +1313,8 @@ a {
 
 @media (max-width: 760px) {
   .admin-shell {
-    padding: 28px 16px 64px;
-    gap: 18px;
+    padding: 20px 12px 58px;
+    gap: 12px;
   }
 
   .admin-intro {
@@ -1261,8 +1329,8 @@ a {
 
   .admin-card {
     width: min(94vw, 960px);
-    padding: 20px 18px 18px;
-    gap: 16px;
+    padding: 14px;
+    gap: 12px;
   }
 
   .admin-form-row {
@@ -1276,10 +1344,17 @@ a {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .admin-lead-grid,
-  .admin-control-grid {
+  .admin-section-stack {
     width: min(94vw, 960px);
+  }
+
+  .admin-section-summary {
     grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .admin-section-summary-side {
+    justify-content: space-between;
   }
 
   .panel-frame,
@@ -1307,6 +1382,15 @@ a {
   }
 
   .proxy-card {
-    min-height: 160px;
+    min-height: 144px;
   }
+}
+
+.telegram-bridge {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
 }

@@ -94,6 +94,8 @@ Rules:
 - from three characters onward the block grows by optical fill, not textarea-style word wrapping
 - text is visible, uppercase visually, case-insensitive in validation
 - weight must feel heavy, dense, and visually confident rather than thin default text
+- live layout should fill almost the entire viewport like a typographic poster, not a neat centered text block
+- rows should stretch vertically so free graphite around the monolith is minimal
 - cursor stays at the end of the last line
 - letter spacing stays tight; word spacing is wider than letter spacing
 - the block should read as a fullscreen typographic lockup
@@ -145,13 +147,17 @@ Archive:
 - same graphite environment
 - utilitarian, not marketing
 - close control in the corner that returns to home without reload
-- top row explains what this screen is
-- first row surfaces current state and quick actions
-- then clear blocks for:
+- clean top bar explains what this screen is
+- content lives in compact collapsible sections instead of one giant always-open page
+- default open sections are only the most used minimum:
+  - current state
+  - quick actions
   - access rules
+- secondary sections stay collapsed until explicitly opened:
   - modes
   - donate and wallets
   - service/export/history
+- mobile admin must feel like a compact hidden control panel rather than an endless raw-form scroll
 - sensitive actions use clear destructive styling but remain visually calm
 
 ## Motion

@@ -13,6 +13,7 @@ import type {
 type SceneState = "home" | "password" | "mode";
 type PasswordVisualState = "clearing" | "cursor" | "typing" | "success" | "fail" | "timeout";
 type ScrollTarget = "archive" | "fresh" | null;
+type AdminSectionKey = "overview" | "quick" | "access" | "modes" | "wallets" | "service";
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") ?? "";
 const PASSWORD_TIMEOUT_MS = 3800;
@@ -27,6 +28,13 @@ interface SessionState {
 interface AdminNotice {
   tone: "success" | "error";
   text: string;
+}
+
+interface ModeOpenPrep {
+  proxiesPayload: ProxiesPayload | null;
+  proxiesDeferred: Promise<void> | null;
+  adminPayload: AdminPayload | null;
+  adminDeferred: Promise<void> | null;
 }
 
 const FALLBACK_BOOTSTRAP: BootstrapPayload = {
@@ -81,6 +89,14 @@ export class AppController {
   private adminNoticeHandle: number | null = null;
   private panelClosing = false;
   private panelCloseHandle: number | null = null;
+  private adminSections: Record<AdminSectionKey, boolean> = {
+    overview: true,
+    quick: true,
+    access: true,
+    modes: false,
+    wallets: false,
+    service: false
+  };
 
   public constructor(root: HTMLDivElement) {
     this.root = root;
@@ -174,7 +190,7 @@ export class AppController {
 
     queueMicrotask(() => {
       const selector = target === "archive" ? ".archive-zone" : ".fresh-grid";
-      this.root.querySelector<HTMLElement>(selector)?.scrollIntoView({
+      this.safeScrollIntoView(this.root.querySelector<HTMLElement>(selector) ?? null, {
         behavior: "smooth",
         block: target === "archive" ? "start" : "center"
       });
@@ -465,11 +481,16 @@ export class AppController {
     }
 
     if (!settled) {
-      const columns = Math.min(length, Math.max(3, Math.round(Math.sqrt(length * 2.35))));
+      const rowCount = length <= 4 ? 1 : length <= 8 ? 2 : length <= 16 ? 3 : 4;
       const rows: string[] = [];
+      let cursor = 0;
 
-      for (let index = 0; index < length; index += columns) {
-        rows.push(characters.slice(index, index + columns).join(""));
+      for (let row = 0; row < rowCount; row += 1) {
+        const remaining = length - cursor;
+        const rowsLeft = rowCount - row;
+        const take = Math.ceil(remaining / rowsLeft);
+        rows.push(characters.slice(cursor, cursor + take).join(""));
+        cursor += take;
       }
 
       return rows;
@@ -497,13 +518,16 @@ export class AppController {
     if (length === 2) {
       return "double";
     }
-    if (length <= 6) {
+    if (length <= 4) {
       return "giant";
     }
-    if (length <= 14) {
+    if (length <= 8) {
       return "dense";
     }
-    return "compact";
+    if (length <= 16) {
+      return "compact";
+    }
+    return "packed";
   }
 
   private resetPasswordTimeout(): void {
@@ -584,6 +608,8 @@ export class AppController {
         return;
       }
 
+      const prep = await this.prepareModeOpen(result.mode, result.token);
+
       this.clearPasswordFlow();
       this.passwordVisualState = "success";
       this.syncPasswordSceneVisuals();
@@ -598,27 +624,89 @@ export class AppController {
         if (result.mode === "proxies_mode") {
           this.archiveOpen = false;
           this.pendingScrollTarget = "fresh";
-          this.proxiesLoadState = "loading";
-          this.currentProxiesPayload = null;
+          this.currentProxiesPayload = prep.proxiesPayload;
+          this.proxiesLoadState = prep.proxiesPayload ? "ready" : "loading";
         }
         if (result.mode === "admin_mode") {
           this.adminError = null;
-          this.adminLoading = false;
-          this.adminPayload = null;
+          this.adminPayload = prep.adminPayload;
+          this.adminLoading = prep.adminDeferred !== null;
         }
         this.render();
-        if (result.mode === "proxies_mode") {
-          void this.ensureProxiesPayload(true);
-        }
-        if (result.mode === "admin_mode") {
-          void this.ensureAdminPayload(true);
-        }
+        void prep.proxiesDeferred;
+        void prep.adminDeferred;
       }, 80);
     } catch {
       window.clearTimeout(requestTimeout);
       this.passwordSubmitPending = false;
       this.leavePasswordScene("timeout");
     }
+  }
+
+  private async prepareModeOpen(mode: string, token: string): Promise<ModeOpenPrep> {
+    const prep: ModeOpenPrep = {
+      proxiesPayload: null,
+      proxiesDeferred: null,
+      adminPayload: null,
+      adminDeferred: null
+    };
+
+    if (mode === "proxies_mode") {
+      const preload = this.fetchProxiesPayload(token);
+      const timed = await Promise.race([
+        preload.then((payload) => ({ kind: "payload" as const, payload })).catch(() => ({ kind: "error" as const })),
+        this.delay(210).then(() => ({ kind: "timeout" as const }))
+      ]);
+
+      if (timed.kind === "payload") {
+        prep.proxiesPayload = timed.payload;
+      } else {
+        const fallback = this.buildProxyFallbackPayload();
+        prep.proxiesPayload = fallback.fresh.length > 0 || fallback.archive.length > 0 ? fallback : null;
+        prep.proxiesDeferred = preload
+          .then((payload) => {
+            this.proxiesLoadState = "ready";
+            this.applyFetchedProxies(payload);
+          })
+          .catch(() => {
+            if (!this.currentProxiesPayload) {
+              this.proxiesLoadState = "error";
+              this.applyFetchedProxies(this.buildProxyFallbackPayload());
+            }
+          });
+      }
+    }
+
+    if (mode === "admin_mode") {
+      const preload = this.fetchAdminPayload(token);
+      const timed = await Promise.race([
+        preload.then((payload) => ({ kind: "payload" as const, payload })).catch(() => ({ kind: "error" as const })),
+        this.delay(180).then(() => ({ kind: "timeout" as const }))
+      ]);
+
+      if (timed.kind === "payload") {
+        prep.adminPayload = timed.payload;
+      } else {
+        prep.adminDeferred = preload
+          .then((payload) => {
+            this.adminPayload = payload;
+            this.adminLoading = false;
+            this.adminError = null;
+            if (this.scene === "mode" && this.session.mode === "admin_mode") {
+              this.render();
+            }
+          })
+          .catch(() => {
+            this.adminError = "load_failed";
+            this.adminLoading = false;
+            if (this.scene === "mode" && this.session.mode === "admin_mode") {
+              this.render();
+            }
+          });
+      }
+    }
+
+    return prep;
   }
 
   private renderProxiesScene(): HTMLElement {
@@ -635,7 +723,7 @@ export class AppController {
     chrome.innerHTML = `
       <div class="panel-kicker-wrap">
         <p class="panel-kicker">proxies_mode</p>
-        <h1>${this.proxiesLoadState === "loading" && !hasItems ? "загружаем свежие прокси..." : payload.title}</h1>
+        <h1>${payload.title}</h1>
       </div>
     `;
     chrome.append(this.renderPanelCloseButton("Вернуться на главную"));
@@ -766,12 +854,12 @@ export class AppController {
 
       if (this.archiveOpen) {
         window.setTimeout(() => {
-          section.scrollIntoView({ behavior: "smooth", block: "start" });
+          this.safeScrollIntoView(section, { behavior: "smooth", block: "start" });
         }, 40);
         return;
       }
 
-      this.root.querySelector<HTMLElement>(".fresh-grid")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      this.safeScrollIntoView(this.root.querySelector<HTMLElement>(".fresh-grid") ?? null, { behavior: "smooth", block: "center" });
 
       if (!this.queuedProxiesPayload) {
         return;
@@ -807,9 +895,7 @@ export class AppController {
       this.render();
     }
     try {
-      const payload = await this.fetchJson<ProxiesPayload>(this.apiUrl("/api/modes/proxies_mode"), {
-        headers: this.authHeaders()
-      });
+      const payload = await this.fetchProxiesPayload();
       this.proxiesLoadState = "ready";
       this.applyFetchedProxies(payload);
     } catch {
@@ -887,59 +973,41 @@ export class AppController {
 
   private async openProxy(item: ProxyItem, archive: boolean): Promise<void> {
     await this.track("proxy_click", { proxyId: item.id, archive });
-
-    const deepLink = this.telegramDeepLink(item.proxyUrl);
-    let fallbackHandled = false;
-
-    const completeFallback = (): void => {
-      if (fallbackHandled) {
-        return;
-      }
-      fallbackHandled = true;
-      window.location.assign(item.proxyUrl);
-    };
-
-    const cancelFallback = (): void => {
-      fallbackHandled = true;
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("pagehide", cancelFallback);
-    };
-
-    const handleVisibilityChange = (): void => {
-      if (document.visibilityState === "hidden") {
-        cancelFallback();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange, { once: true });
-    window.addEventListener("pagehide", cancelFallback, { once: true });
-    window.setTimeout(() => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("pagehide", cancelFallback);
-      if (!fallbackHandled && document.visibilityState === "visible") {
-        completeFallback();
-      }
-    }, TELEGRAM_FALLBACK_DELAY_MS);
-
-    window.location.assign(deepLink);
+    this.openTelegramTarget(this.telegramDeepLink(item.proxyUrl), item.proxyUrl);
   }
 
   private openTelegramChannel(channelUrl: string): void {
-    const deepLink = this.telegramChannelDeepLink(channelUrl);
-    let fallbackHandled = false;
+    this.openTelegramTarget(this.telegramChannelDeepLink(channelUrl), channelUrl);
+  }
 
-    const completeFallback = (): void => {
-      if (fallbackHandled) {
-        return;
+  private openTelegramTarget(deepLink: string, fallbackUrl: string): void {
+    let handled = false;
+    let timer = 0;
+
+    const cleanup = (): void => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", cancelFallback);
+      window.removeEventListener("blur", handleWindowBlur);
+      if (timer) {
+        window.clearTimeout(timer);
       }
-      fallbackHandled = true;
-      window.location.assign(channelUrl);
     };
 
     const cancelFallback = (): void => {
-      fallbackHandled = true;
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("pagehide", cancelFallback);
+      if (handled) {
+        return;
+      }
+      handled = true;
+      cleanup();
+    };
+
+    const completeFallback = (): void => {
+      if (handled) {
+        return;
+      }
+      handled = true;
+      cleanup();
+      this.navigateToUrl(fallbackUrl);
     };
 
     const handleVisibilityChange = (): void => {
@@ -948,17 +1016,40 @@ export class AppController {
       }
     };
 
-    document.addEventListener("visibilitychange", handleVisibilityChange, { once: true });
+    const handleWindowBlur = (): void => {
+      window.setTimeout(() => {
+        if (document.visibilityState === "hidden" || !document.hasFocus()) {
+          cancelFallback();
+        }
+      }, 90);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("pagehide", cancelFallback, { once: true });
-    window.setTimeout(() => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("pagehide", cancelFallback);
-      if (!fallbackHandled && document.visibilityState === "visible") {
+    window.addEventListener("blur", handleWindowBlur, { once: true });
+    timer = window.setTimeout(() => {
+      if (!handled && document.visibilityState === "visible") {
         completeFallback();
       }
     }, TELEGRAM_FALLBACK_DELAY_MS);
 
-    window.location.assign(deepLink);
+    this.dispatchTelegramDeepLink(deepLink);
+  }
+
+  private dispatchTelegramDeepLink(deepLink: string): void {
+    const bridge = document.createElement("iframe");
+    bridge.className = "telegram-bridge";
+    bridge.setAttribute("aria-hidden", "true");
+    bridge.tabIndex = -1;
+    bridge.src = deepLink;
+    document.body.append(bridge);
+    window.setTimeout(() => {
+      bridge.remove();
+    }, 900);
+  }
+
+  private navigateToUrl(url: string): void {
+    window.location.assign(url);
   }
 
   private telegramDeepLink(proxyUrl: string): string {
@@ -1009,23 +1100,18 @@ export class AppController {
       return shell;
     }
 
-    const leadGrid = document.createElement("section");
-    leadGrid.className = "admin-lead-grid";
-    leadGrid.append(
-      this.sectionCard("Сейчас на сайте", "Короткая сводка по текущему состоянию, чтобы сразу понимать, жив ли сайт и что открыто.", this.renderAdminOverview(payload)),
-      this.sectionCard("Быстрые действия", "Самые частые сценарии: открыть доступ в прокси, обновить прокси сейчас, быстро закрыть доступ или изменить глобальные переключатели.", this.renderAdminGuide(payload))
+    const stack = document.createElement("section");
+    stack.className = "admin-section-stack";
+    stack.append(
+      this.renderAdminSection("overview", "Сейчас на сайте", "Короткая сводка по текущему состоянию.", this.renderAdminOverview(payload), "статус"),
+      this.renderAdminSection("quick", "Быстрые действия", "Самые частые сценарии без лишнего поиска.", this.renderAdminGuide(payload), "сразу под рукой"),
+      this.renderAdminSection("access", "Правила доступа", "Пароли, режимы, отключение и архив.", this.renderAccessRules(payload.accessRules, payload.modes), `${payload.accessRules.filter((rule) => !rule.softDeletedAt).length} правил`),
+      this.renderAdminSection("modes", "Режимы сайта", "Что открыто публично и какие режимы включены.", this.renderModes(payload.modes), `${payload.modes.length} режима`),
+      this.renderAdminSection("wallets", "Donate и кошельки", "Адреса, видимость donate и wallet entries.", this.renderWallets(payload.wallets, payload.settings), `${payload.wallets.length} кошелька`),
+      this.renderAdminSection("service", "Служебное", "Экспорт, импорт и последние административные события.", this.renderAdminUtility(payload), `${payload.audit.length} событий`)
     );
 
-    const controlGrid = document.createElement("section");
-    controlGrid.className = "admin-control-grid";
-    controlGrid.append(
-      this.sectionCard("Правила доступа", "Здесь вы создаете пароль, меняете его, выключаете или отправляете в архив. Один пароль всегда открывает один конкретный режим.", this.renderAccessRules(payload.accessRules, payload.modes)),
-      this.sectionCard("Режимы сайта", "Здесь определяется, какой режим публичный, какой закрытый и какие режимы вообще включены.", this.renderModes(payload.modes)),
-      this.sectionCard("Donate и кошельки", "Показывать или скрывать donate, менять адреса и включать нужные wallet entries.", this.renderWallets(payload.wallets, payload.settings)),
-      this.sectionCard("Служебное", "Экспорт, импорт и последние административные события. Используйте это для резервирования и быстрой проверки действий.", this.renderAdminUtility(payload))
-    );
-
-    shell.append(leadGrid, controlGrid);
+    shell.append(stack);
     return shell;
   }
 
@@ -1057,9 +1143,7 @@ export class AppController {
     }
 
     try {
-      this.adminPayload = await this.fetchJson<AdminPayload>(this.apiUrl("/api/admin/bootstrap"), {
-        headers: this.authHeaders()
-      });
+      this.adminPayload = await this.fetchAdminPayload();
     } catch {
       this.adminError = "load_failed";
     } finally {
@@ -1070,17 +1154,37 @@ export class AppController {
     }
   }
 
-  private sectionCard(title: string, description: string, content: HTMLElement): HTMLElement {
-    const card = document.createElement("section");
-    card.className = "admin-card";
-    card.innerHTML = `
-      <div class="admin-card-header">
-        <h2>${title}</h2>
-        <p>${description}</p>
-      </div>
+  private renderAdminSection(
+    key: AdminSectionKey,
+    title: string,
+    description: string,
+    content: HTMLElement,
+    meta: string
+  ): HTMLElement {
+    const section = document.createElement("details");
+    section.className = "admin-card admin-section";
+    section.open = this.adminSections[key];
+    section.innerHTML = `
+      <summary class="admin-section-summary">
+        <div class="admin-section-summary-copy">
+          <h2>${title}</h2>
+          <p>${description}</p>
+        </div>
+        <div class="admin-section-summary-side">
+          <span class="admin-section-meta">${meta}</span>
+          <span class="admin-section-arrow" aria-hidden="true"></span>
+        </div>
+      </summary>
     `;
-    card.append(content);
-    return card;
+    section.addEventListener("toggle", () => {
+      this.adminSections[key] = section.open;
+    });
+
+    const body = document.createElement("div");
+    body.className = "admin-section-body";
+    body.append(content);
+    section.append(body);
+    return section;
   }
 
   private renderHealth(payload: AdminPayload): HTMLElement {
@@ -1759,8 +1863,8 @@ export class AppController {
     }
   }
 
-  private authHeaders(): HeadersInit {
-    return this.session.token ? { Authorization: `Bearer ${this.session.token}` } : {};
+  private authHeaders(token = this.session.token): HeadersInit {
+    return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
   private async fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
@@ -1800,6 +1904,31 @@ export class AppController {
 
   private apiUrl(path: string): string {
     return `${API_BASE}${path}`;
+  }
+
+  private async fetchProxiesPayload(token = this.session.token ?? ""): Promise<ProxiesPayload> {
+    return this.fetchJson<ProxiesPayload>(this.apiUrl("/api/modes/proxies_mode"), {
+      headers: this.authHeaders(token)
+    });
+  }
+
+  private async fetchAdminPayload(token = this.session.token ?? ""): Promise<AdminPayload> {
+    return this.fetchJson<AdminPayload>(this.apiUrl("/api/admin/bootstrap"), {
+      headers: this.authHeaders(token)
+    });
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
+  }
+
+  private safeScrollIntoView(element: HTMLElement | null, options: ScrollIntoViewOptions): void {
+    if (!element || typeof element.scrollIntoView !== "function") {
+      return;
+    }
+    element.scrollIntoView(options);
   }
 
   private escapeHtml(value: string): string {

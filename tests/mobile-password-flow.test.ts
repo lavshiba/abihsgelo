@@ -121,6 +121,84 @@ describe("password flow", () => {
       .toBe("tg://resolve?domain=abihsgelo");
   });
 
+  it("tries telegram app first and only falls back to web after timeout", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith("/snapshot.json")) {
+        return new Response(JSON.stringify({ fresh: [], archive: [] }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && (!init?.method || init.method === "GET")) {
+        return new Response(JSON.stringify(bootstrapPayload), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = new AppController(document.querySelector("#app") as HTMLDivElement);
+    await app.start();
+
+    const dispatchSpy = vi.spyOn(app as any, "dispatchTelegramDeepLink").mockImplementation(() => undefined);
+    const navigateSpy = vi.spyOn(app as any, "navigateToUrl").mockImplementation(() => undefined);
+
+    (app as any).openTelegramChannel("https://t.me/abihsgelo");
+
+    expect(dispatchSpy).toHaveBeenCalledWith("tg://resolve?domain=abihsgelo");
+    expect(navigateSpy).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(800);
+
+    expect(navigateSpy).toHaveBeenCalledWith("https://t.me/abihsgelo");
+  });
+
+  it("does not fall back to telegram website if the page becomes hidden after deep link attempt", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith("/snapshot.json")) {
+        return new Response(JSON.stringify({ fresh: [], archive: [] }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && (!init?.method || init.method === "GET")) {
+        return new Response(JSON.stringify(bootstrapPayload), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    let visibility: DocumentVisibilityState = "visible";
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => visibility
+    });
+    vi.spyOn(document, "hasFocus").mockReturnValue(false);
+
+    const app = new AppController(document.querySelector("#app") as HTMLDivElement);
+    await app.start();
+
+    const navigateSpy = vi.spyOn(app as any, "navigateToUrl").mockImplementation(() => undefined);
+    (app as any).openTelegramChannel("https://t.me/abihsgelo");
+
+    visibility = "hidden";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(800);
+
+    expect(navigateSpy).not.toHaveBeenCalled();
+  });
+
   it("submits on mobile insertLineBreak action", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -473,5 +551,64 @@ describe("password flow", () => {
 
     expect(document.querySelector(".home-shell")).toBeTruthy();
     expect(document.querySelector(".proxies-shell")).toBeFalsy();
+  });
+
+  it("opens proxies panel already filled with proxy cards when payload preloads during auth success", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith("/snapshot.json")) {
+        return new Response(JSON.stringify({ fresh: [], archive: [] }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && (!init?.method || init.method === "GET")) {
+        return new Response(JSON.stringify(bootstrapPayload), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/auth/enter")) {
+        return new Response(JSON.stringify({ ok: true, mode: "proxies_mode", token: "token-ready-proxies" }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/modes/proxies_mode")) {
+        return new Response(JSON.stringify({
+          mode: "proxies_mode",
+          title: "последние 2 свежих прокси",
+          lastSuccessfulRefreshAt: "2026-04-09 14:55:00",
+          isStale: false,
+          staleReason: null,
+          fresh: [
+            { id: "proxy-2", proxyNumber: 2, proxyUrl: "tg://proxy?server=2", postedAt: "2026-04-09T14:55:00+00:00", sourceMessageId: "2" },
+            { id: "proxy-1", proxyNumber: 1, proxyUrl: "tg://proxy?server=1", postedAt: "2026-04-09T14:45:00+00:00", sourceMessageId: "1" }
+          ],
+          archive: []
+        }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = new AppController(document.querySelector("#app") as HTMLDivElement);
+    await app.start();
+
+    (document.querySelector(".home-shell") as HTMLElement).click();
+    await vi.advanceTimersByTimeAsync(280);
+
+    const input = document.querySelector(".password-hidden-input") as HTMLTextAreaElement;
+    input.value = "proxy-pass";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(260);
+    await Promise.resolve();
+
+    expect(document.querySelector(".proxies-shell")).toBeTruthy();
+    expect(document.querySelectorAll(".proxy-card").length).toBe(2);
+    expect(document.querySelector(".proxies-empty")).toBeFalsy();
   });
 });

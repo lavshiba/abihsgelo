@@ -22,6 +22,16 @@ This bootstrap path is required to prevent the deadlock where `admin_mode` is lo
 - same graphite visual world as the rest of the site
 - top-right close control returns to the home scene without reload
 - short success or error feedback after save actions
+- compact collapsible sections keep desktop and mobile from turning into one endless page
+- the top bar is always visible first: panel meaning on the left, close control on the right
+- default open sections are:
+  - current state
+  - quick actions
+  - access rules
+- less frequent sections stay collapsed until needed:
+  - modes
+  - donate and wallets
+  - service/export/audit
 - access rules grouped into:
   - quick proxy password creation
   - create new rule
