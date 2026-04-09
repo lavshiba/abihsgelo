@@ -193,4 +193,65 @@ describe("password flow", () => {
     );
     expect(document.querySelector(".admin-shell")).toBeTruthy();
   });
+
+  it("does not fall back to home if successful auth is slower than the visual password timeout", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith("/snapshot.json")) {
+        return new Response(JSON.stringify({ fresh: [], archive: [] }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && (!init?.method || init.method === "GET")) {
+        return new Response(JSON.stringify(bootstrapPayload), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/auth/enter")) {
+        await new Promise((resolve) => window.setTimeout(resolve, 4500));
+        return new Response(JSON.stringify({ ok: true, mode: "admin_mode", token: "slow-token" }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/admin/bootstrap")) {
+        return new Response(JSON.stringify({
+          mode: "admin_mode",
+          modes: [],
+          wallets: [],
+          accessRules: [],
+          settings: {},
+          health: {},
+          audit: []
+        }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = new AppController(document.querySelector("#app") as HTMLDivElement);
+    await app.start();
+
+    (document.querySelector(".home-shell") as HTMLElement).click();
+    await vi.advanceTimersByTimeAsync(280);
+
+    const input = document.querySelector(".password-hidden-input") as HTMLTextAreaElement;
+    input.value = "olegadmin";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await Promise.resolve();
+
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await Promise.resolve();
+
+    await vi.advanceTimersByTimeAsync(4600);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(160);
+    await Promise.resolve();
+
+    expect(document.querySelector(".admin-shell")).toBeTruthy();
+    expect(document.querySelector(".home-shell")).toBeFalsy();
+  });
 });

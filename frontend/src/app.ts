@@ -16,6 +16,7 @@ type ScrollTarget = "archive" | "fresh" | null;
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") ?? "";
 const PASSWORD_TIMEOUT_MS = 3800;
+const AUTH_REQUEST_TIMEOUT_MS = 10000;
 const TELEGRAM_FALLBACK_DELAY_MS = 720;
 
 interface SessionState {
@@ -484,14 +485,17 @@ export class AppController {
 
     this.passwordSubmitPending = true;
     this.clearPasswordFlow();
-    this.resetPasswordTimeout();
+    const controller = new AbortController();
+    const requestTimeout = window.setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
 
     try {
       const result = await this.fetchJson<{ ok: boolean; mode?: string; token?: string }>(this.apiUrl("/api/auth/enter"), {
         method: "POST",
         body: JSON.stringify({ password: this.passwordBuffer }),
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal
       });
+      window.clearTimeout(requestTimeout);
 
       if (!result.ok || !result.mode || !result.token) {
         this.passwordSubmitPending = false;
@@ -512,16 +516,23 @@ export class AppController {
           this.archiveOpen = false;
           this.pendingScrollTarget = "fresh";
           this.proxiesLoadState = "loading";
-          void this.ensureProxiesPayload(true);
+          this.currentProxiesPayload = null;
         }
         if (result.mode === "admin_mode") {
           this.adminError = null;
-          this.adminLoading = true;
-          void this.ensureAdminPayload(true);
+          this.adminLoading = false;
+          this.adminPayload = null;
         }
         this.render();
-      }, 320);
+        if (result.mode === "proxies_mode") {
+          void this.ensureProxiesPayload(true);
+        }
+        if (result.mode === "admin_mode") {
+          void this.ensureAdminPayload(true);
+        }
+      }, 120);
     } catch {
+      window.clearTimeout(requestTimeout);
       this.passwordSubmitPending = false;
       this.leavePasswordScene("timeout");
     }
