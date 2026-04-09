@@ -207,7 +207,11 @@ export class AppController {
       <section class="home-empty-plane" aria-hidden="true"></section>
     `;
 
-    shell.querySelector<HTMLAnchorElement>(".tg-button")?.addEventListener("click", () => this.track("tg_click"));
+    shell.querySelector<HTMLAnchorElement>(".tg-button")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      void this.track("tg_click");
+      this.openTelegramChannel(this.bootstrap.telegramUrl);
+    });
 
     if (this.bootstrap.donateVisible) {
       shell.append(this.renderDonateBlock());
@@ -269,9 +273,15 @@ export class AppController {
   private renderPasswordScene(): HTMLElement {
     const shell = document.createElement("main");
     shell.className = `password-shell password-state-${this.passwordVisualState}`;
-    shell.addEventListener("click", () => {
+    const focusPassword = (event?: Event): void => {
+      event?.preventDefault();
+      this.focusPasswordInputNow();
       this.schedulePasswordFocus(true);
-    });
+      this.resetPasswordTimeout();
+    };
+    shell.addEventListener("pointerdown", focusPassword);
+    shell.addEventListener("touchend", focusPassword);
+    shell.addEventListener("click", focusPassword);
 
     const stage = document.createElement("section");
     stage.className = "password-stage";
@@ -845,12 +855,59 @@ export class AppController {
     window.location.assign(deepLink);
   }
 
+  private openTelegramChannel(channelUrl: string): void {
+    const deepLink = this.telegramChannelDeepLink(channelUrl);
+    let fallbackHandled = false;
+
+    const completeFallback = (): void => {
+      if (fallbackHandled) {
+        return;
+      }
+      fallbackHandled = true;
+      window.location.assign(channelUrl);
+    };
+
+    const cancelFallback = (): void => {
+      fallbackHandled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", cancelFallback);
+    };
+
+    const handleVisibilityChange = (): void => {
+      if (document.visibilityState === "hidden") {
+        cancelFallback();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange, { once: true });
+    window.addEventListener("pagehide", cancelFallback, { once: true });
+    window.setTimeout(() => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", cancelFallback);
+      if (!fallbackHandled && document.visibilityState === "visible") {
+        completeFallback();
+      }
+    }, TELEGRAM_FALLBACK_DELAY_MS);
+
+    window.location.assign(deepLink);
+  }
+
   private telegramDeepLink(proxyUrl: string): string {
     try {
       const url = new URL(proxyUrl);
       return `tg://proxy?${url.searchParams.toString()}`;
     } catch {
       return proxyUrl;
+    }
+  }
+
+  private telegramChannelDeepLink(channelUrl: string): string {
+    try {
+      const url = new URL(channelUrl);
+      const domain = url.pathname.replace(/^\/+/, "").split("/")[0];
+      return domain ? `tg://resolve?domain=${encodeURIComponent(domain)}` : channelUrl;
+    } catch {
+      return channelUrl;
     }
   }
 
@@ -1681,12 +1738,21 @@ export class AppController {
         if (!input) {
           return;
         }
-        input.focus({ preventScroll: true });
-        const length = input.value.length;
-        input.setSelectionRange(length, length);
+        this.focusPasswordInputNow(input);
       }, delay);
       this.passwordFocusHandles.push(handle);
     }
+  }
+
+  private focusPasswordInputNow(target?: HTMLTextAreaElement | null): void {
+    const input = target ?? this.passwordInput ?? this.root.querySelector<HTMLTextAreaElement>(".password-hidden-input");
+    if (!input) {
+      return;
+    }
+
+    input.focus({ preventScroll: true });
+    const length = input.value.length;
+    input.setSelectionRange(length, length);
   }
 
   private syncPasswordBufferFromInput(allowSubmitFromLineBreak: boolean): void {

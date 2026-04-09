@@ -59,6 +59,68 @@ describe("password flow", () => {
     await startPromise;
   });
 
+  it("focuses the hidden password input on mobile-like tap inside password scene", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith("/snapshot.json")) {
+        return new Response(JSON.stringify({ fresh: [], archive: [] }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && (!init?.method || init.method === "GET")) {
+        return new Response(JSON.stringify(bootstrapPayload), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = new AppController(document.querySelector("#app") as HTMLDivElement);
+    await app.start();
+
+    (document.querySelector(".home-shell") as HTMLElement).click();
+    await vi.advanceTimersByTimeAsync(280);
+
+    const shell = document.querySelector(".password-shell") as HTMLElement;
+    const input = document.querySelector(".password-hidden-input") as HTMLTextAreaElement;
+    shell.dispatchEvent(new Event("touchend", { bubbles: true, cancelable: true }));
+
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("builds telegram app deep link for the tg button", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith("/snapshot.json")) {
+        return new Response(JSON.stringify({ fresh: [], archive: [] }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && (!init?.method || init.method === "GET")) {
+        return new Response(JSON.stringify(bootstrapPayload), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = new AppController(document.querySelector("#app") as HTMLDivElement);
+    await app.start();
+
+    expect((app as any).telegramChannelDeepLink("https://t.me/abihsgelo"))
+      .toBe("tg://resolve?domain=abihsgelo");
+  });
+
   it("submits on mobile insertLineBreak action", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
