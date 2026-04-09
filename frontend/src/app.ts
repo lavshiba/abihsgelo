@@ -757,17 +757,17 @@ export class AppController {
       <section class="admin-intro">
         <p class="admin-kicker">hidden admin</p>
         <h1>Панель управления</h1>
-        <p class="admin-intro-copy">Здесь вы управляете доступом, режимами, кошельками и оперативными действиями без правки кода.</p>
+        <p class="admin-intro-copy">Здесь можно без правки кода управлять доступами, режимами сайта, donate-блоком и быстрыми действиями. Экран собран по задачам: сначала что происходит сейчас, потом что чаще всего нужно сделать, и ниже подробное управление.</p>
       </section>
     `;
     shell.append(
-      this.sectionCard("Состояние", "Живой статус воркера, D1 и bootstrap-доступа.", this.renderHealth(payload)),
-      this.sectionCard("Настройки", "Глобальные переключатели публичной сцены и emergency-режима.", this.renderSettings(payload.settings)),
-      this.sectionCard("Режимы", "Какие режимы открыты, заблокированы и какой режим публичный по умолчанию.", this.renderModes(payload.modes)),
-      this.sectionCard("Пароли и доступы", "Создание, архивирование и переназначение правил доступа для режимов.", this.renderAccessRules(payload.accessRules)),
-      this.sectionCard("Кошельки", "Управление donate-блоком и адресами для сетей.", this.renderWallets(payload.wallets)),
-      this.sectionCard("Экспорт и импорт", "Резервные выгрузки и ручное восстановление служебных данных.", this.renderExports()),
-      this.sectionCard("Журнал", "Последние события авторизации и административных действий.", this.renderAudit(payload.audit))
+      this.sectionCard("Кратко по состоянию", "Самое важное прямо сейчас: сайт жив, bootstrap работает, donate включен или нет, и какие режимы доступны.", this.renderAdminOverview(payload)),
+      this.sectionCard("Быстрые действия", "Что обычно нужно сделать в первую очередь: обновить прокси, сразу заблокировать доступ, создать пароль для режима или поменять глобальные переключатели.", this.renderAdminGuide(payload)),
+      this.sectionCard("Правила доступа", "Здесь создаются и редактируются пароли. Каждый пароль открывает конкретный режим сайта.", this.renderAccessRules(payload.accessRules, payload.modes)),
+      this.sectionCard("Режимы сайта", "Здесь решается, какой режим публичный, какой закрытый, и какие режимы вообще включены.", this.renderModes(payload.modes)),
+      this.sectionCard("Donate и кошельки", "Управление видимостью donate-блока и адресами кошельков для сетей.", this.renderWallets(payload.wallets, payload.settings)),
+      this.sectionCard("Резервные копии", "Экспорт и импорт служебных данных. Используйте перед крупными изменениями.", this.renderExports()),
+      this.sectionCard("Последние события", "Журнал входов и административных действий, чтобы понимать, что происходило недавно.", this.renderAudit(payload.audit))
     );
     this.root.append(shell);
   }
@@ -809,25 +809,123 @@ export class AppController {
     return wrap;
   }
 
+  private renderAdminOverview(payload: AdminPayload): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "admin-overview-grid";
+
+    const modes = payload.modes;
+    const publicMode = modes.find((mode) => mode.isDefaultPublic);
+    const lockedModes = modes.filter((mode) => mode.accessState === "locked" && mode.isEnabled).length;
+    const activeRules = payload.accessRules.filter((rule) => rule.isEnabled && !rule.softDeletedAt).length;
+    const archivedRules = payload.accessRules.filter((rule) => Boolean(rule.softDeletedAt)).length;
+
+    const cards = [
+      {
+        label: "Публичная сцена",
+        value: publicMode ? this.modeLabel(publicMode.id) : "не выбрана",
+        hint: "Это то, что открывается всем без пароля."
+      },
+      {
+        label: "Закрытых режимов",
+        value: String(lockedModes),
+        hint: "Эти режимы требуют пароль."
+      },
+      {
+        label: "Активных правил доступа",
+        value: String(activeRules),
+        hint: "Ими можно войти прямо сейчас."
+      },
+      {
+        label: "Правил в архиве",
+        value: String(archivedRules),
+        hint: "Они сохранены, но не используются."
+      },
+      {
+        label: "Donate-блок",
+        value: payload.settings["donate.visible"] ? "показан" : "скрыт",
+        hint: "Настраивается ниже в блоке кошельков."
+      },
+      {
+        label: "Режим тревоги",
+        value: payload.settings["panic_mode"] ? "включен" : "выключен",
+        hint: "Глобальный аварийный переключатель."
+      }
+    ];
+
+    wrap.innerHTML = cards
+      .map((card) => `
+        <article class="admin-overview-card">
+          <p class="admin-overview-label">${card.label}</p>
+          <strong>${card.value}</strong>
+          <p class="admin-overview-hint">${card.hint}</p>
+        </article>
+      `)
+      .join("");
+
+    wrap.append(this.renderHealth(payload));
+    return wrap;
+  }
+
+  private renderAdminGuide(payload: AdminPayload): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "admin-guide-grid";
+
+    const proxiesRuleExists = payload.accessRules.some((rule) => !rule.softDeletedAt && rule.isEnabled && rule.targetMode === "proxies_mode");
+    wrap.innerHTML = `
+      <article class="admin-guide-card">
+        <h3>Если хотите открыть вход в прокси</h3>
+        <p>${proxiesRuleExists ? "Пароль для proxies_mode уже существует. Его можно поменять или отключить ниже в блоке правил доступа." : "Сейчас активного пароля для proxies_mode нет. Ниже в блоке правил доступа создайте новое правило и выберите режим «Прокси»."}</p>
+      </article>
+      <article class="admin-guide-card">
+        <h3>Если хотите срочно закрыть доступ</h3>
+        <p>Используйте кнопку «Мгновенно заблокировать». Она сбросит активные сессии защищенных режимов.</p>
+      </article>
+      <article class="admin-guide-card">
+        <h3>Если хотите спрятать donate-блок</h3>
+        <p>Переключите видимость donate в блоке «Donate и кошельки». Там же меняются адреса кошельков.</p>
+      </article>
+    `;
+
+    const actions = document.createElement("div");
+    actions.className = "admin-actions admin-actions-wide";
+
+    const refresh = document.createElement("button");
+    refresh.textContent = "Обновить прокси сейчас";
+    refresh.addEventListener("click", () => void this.adminAction("/api/admin/refresh-now"));
+
+    const lock = document.createElement("button");
+    lock.textContent = "Мгновенно заблокировать";
+    lock.className = "danger";
+    lock.addEventListener("click", () => void this.adminAction("/api/admin/lock-now"));
+
+    actions.append(refresh, lock);
+    wrap.append(actions);
+
+    return wrap;
+  }
+
   private renderModes(modes: ModeSummary[]): HTMLElement {
     const list = document.createElement("div");
     list.className = "admin-list";
 
     for (const mode of modes) {
       const row = document.createElement("form");
-      row.className = "admin-form-row";
+      row.className = "admin-form-row admin-form-card";
       row.innerHTML = `
-        <strong>${this.modeLabel(mode.id)}</strong>
-        <label>Доступ
+        <div class="admin-form-heading">
+          <strong>${this.modeLabel(mode.id)}</strong>
+          <p>${this.modeHelp(mode.id)}</p>
+        </div>
+        <label>Тип доступа
           <select name="accessState">
             <option value="public" ${mode.accessState === "public" ? "selected" : ""}>публичный</option>
             <option value="locked" ${mode.accessState === "locked" ? "selected" : ""}>закрытый</option>
           </select>
         </label>
-        <label>Включен
+        <label>Режим включен
           <input name="isEnabled" type="checkbox" ${mode.isEnabled ? "checked" : ""} />
         </label>
-        <label>Публичный по умолчанию
+        <label>Открывать всем по умолчанию
           <input name="isDefaultPublic" type="checkbox" ${mode.isDefaultPublic ? "checked" : ""} />
         </label>
         <button type="submit">Сохранить режим</button>
@@ -878,84 +976,36 @@ export class AppController {
     return form;
   }
 
-  private renderAccessRules(rules: AccessRuleSummary[]): HTMLElement {
+  private renderAccessRules(rules: AccessRuleSummary[], modes: ModeSummary[]): HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "admin-list";
 
-    for (const rule of rules) {
-      const row = document.createElement("form");
-      row.className = "admin-form-row";
-      row.innerHTML = `
-        <strong>${this.escapeHtml(rule.label)}${rule.softDeletedAt ? " [в архиве]" : ""}</strong>
-        <label>Режим
-          <input name="targetMode" value="${this.escapeHtml(rule.targetMode)}" />
-        </label>
-        <label>Название правила
-          <input name="label" value="${this.escapeHtml(rule.label)}" />
-        </label>
-        <label>Приоритет
-          <input name="priority" type="number" value="${rule.priority}" />
-        </label>
-        <label>Включено
-          <input name="isEnabled" type="checkbox" ${rule.isEnabled ? "checked" : ""} ${rule.softDeletedAt ? "disabled" : ""} />
-        </label>
-        <label>Архив
-          <input name="softDelete" type="checkbox" ${rule.softDeletedAt ? "checked" : ""} />
-        </label>
-        <label>Новый пароль
-          <input name="password" type="text" placeholder="оставьте пустым, чтобы не менять" />
-        </label>
-        <label>Заметки
-          <input name="notes" value="${this.escapeHtml(rule.notes ?? "")}" />
-        </label>
-        <label>Истекает
-          <input name="expiresAt" type="datetime-local" value="${this.toDatetimeLocalValue(rule.expiresAt)}" />
-        </label>
-        <label>Максимум использований
-          <input name="maxUses" type="number" min="1" value="${rule.maxUses ?? ""}" />
-        </label>
-        <label>Только одно успешное использование
-          <input name="firstUseOnly" type="checkbox" ${rule.firstUseOnly ? "checked" : ""} />
-        </label>
-        <p class="admin-rule-meta">Использований: ${rule.usageCount} | Успехов: ${rule.successCount} | Ошибок: ${rule.failCount}</p>
-        <p class="admin-rule-meta">Последнее использование: ${rule.lastUsedAt ? this.formatTimestamp(rule.lastUsedAt) : "никогда"}</p>
-        <button type="submit">Сохранить правило</button>
-      `;
-      row.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const form = new FormData(row);
-        void this.fetchJson(this.apiUrl(`/api/admin/access-rules/${rule.id}`), {
-          method: "PUT",
-          headers: { ...this.authHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({
-            label: form.get("label"),
-            targetMode: form.get("targetMode"),
-            priority: Number(form.get("priority")),
-            isEnabled: form.get("softDelete") === "on" ? false : form.get("isEnabled") === "on",
-            softDelete: form.get("softDelete") === "on",
-            password: String(form.get("password") ?? ""),
-            notes: String(form.get("notes") ?? ""),
-            expiresAt: String(form.get("expiresAt") ?? ""),
-            maxUses: String(form.get("maxUses") ?? ""),
-            firstUseOnly: form.get("firstUseOnly") === "on"
-          })
-        }).then(() => this.render());
-      });
-      wrap.append(row);
-    }
+    const helper = document.createElement("div");
+    helper.className = "admin-helper";
+    helper.innerHTML = `
+      <p><strong>Как читать этот блок:</strong> одно правило = один пароль = один режим сайта. Сначала создайте новое правило, потом при необходимости отключайте, архивируйте или меняйте пароль у существующих.</p>
+    `;
+    wrap.append(helper);
 
     const add = document.createElement("form");
-    add.className = "admin-form-row";
-    add.innerHTML = `
-      <strong>Новое правило доступа</strong>
-      <label>Название <input name="label" required /></label>
-      <label>Режим <input name="targetMode" required /></label>
+    add.className = "admin-form-row admin-form-card admin-create-card";
+      add.innerHTML = `
+      <div class="admin-form-heading">
+        <strong>Создать новое правило доступа</strong>
+        <p>Например: отдельный пароль для прокси или новый пароль для входа в админку.</p>
+      </div>
+      <label>Понятное название
+        <input name="label" required placeholder="например, доступ в прокси" />
+      </label>
+      <label>Какой режим открывает этот пароль
+        <select name="targetMode" required>${this.modeOptions(modes)}</select>
+      </label>
       <label>Приоритет <input name="priority" type="number" value="100" /></label>
-      <label>Пароль <input name="password" required /></label>
-      <label>Заметки <input name="notes" /></label>
-      <label>Истекает <input name="expiresAt" type="datetime-local" /></label>
-      <label>Максимум использований <input name="maxUses" type="number" min="1" /></label>
-      <label>Только одно успешное использование <input name="firstUseOnly" type="checkbox" /></label>
+      <label>Новый пароль <input name="password" required /></label>
+      <label>Комментарий для вас <input name="notes" placeholder="необязательно" /></label>
+      <label>Когда перестанет работать <input name="expiresAt" type="datetime-local" /></label>
+      <label>Сколько раз можно использовать <input name="maxUses" type="number" min="1" /></label>
+      <label>Разрешить только один успешный вход <input name="firstUseOnly" type="checkbox" /></label>
       <button type="submit">Создать правило</button>
     `;
     add.addEventListener("submit", (event) => {
@@ -978,21 +1028,125 @@ export class AppController {
     });
     wrap.append(add);
 
+    const activeRules = rules.filter((rule) => !rule.softDeletedAt);
+    const archivedRules = rules.filter((rule) => Boolean(rule.softDeletedAt));
+
+    wrap.append(this.renderRuleGroup("Активные правила", "Ими можно пользоваться сейчас. Здесь удобно менять режим, пароль и ограничения.", activeRules, modes));
+
+    if (archivedRules.length > 0) {
+      wrap.append(this.renderRuleGroup("Архив", "Старые или временно отключенные правила. Их можно вернуть или оставить как историю.", archivedRules, modes));
+    }
+
     return wrap;
   }
 
-  private renderWallets(wallets: WalletEntry[]): HTMLElement {
+  private renderRuleGroup(title: string, description: string, rules: AccessRuleSummary[], modes: ModeSummary[]): HTMLElement {
+    const group = document.createElement("section");
+    group.className = "admin-rule-group";
+    group.innerHTML = `
+      <div class="admin-subsection-header">
+        <h3>${title}</h3>
+        <p>${description}</p>
+      </div>
+    `;
+
+    const list = document.createElement("div");
+    list.className = "admin-list";
+
+    for (const rule of rules) {
+      const row = document.createElement("form");
+      row.className = "admin-form-row admin-form-card";
+      row.innerHTML = `
+        <div class="admin-form-heading">
+          <strong>${this.escapeHtml(rule.label)}</strong>
+          <p>Открывает режим: ${this.modeLabel(rule.targetMode)}</p>
+        </div>
+        <div class="admin-badges">
+          <span class="admin-badge">${rule.softDeletedAt ? "в архиве" : rule.isEnabled ? "включено" : "выключено"}</span>
+          <span class="admin-badge">${this.modeLabel(rule.targetMode)}</span>
+        </div>
+        <label>Название правила
+          <input name="label" value="${this.escapeHtml(rule.label)}" />
+        </label>
+        <label>Какой режим открывает
+          <select name="targetMode">${this.modeOptions(modes, rule.targetMode)}</select>
+        </label>
+        <label>Приоритет
+          <input name="priority" type="number" value="${rule.priority}" />
+        </label>
+        <label>Правило включено
+          <input name="isEnabled" type="checkbox" ${rule.isEnabled ? "checked" : ""} ${rule.softDeletedAt ? "disabled" : ""} />
+        </label>
+        <label>Убрать в архив
+          <input name="softDelete" type="checkbox" ${rule.softDeletedAt ? "checked" : ""} />
+        </label>
+        <label>Задать новый пароль
+          <input name="password" type="text" placeholder="оставьте пустым, если не меняете" />
+        </label>
+        <label>Комментарий
+          <input name="notes" value="${this.escapeHtml(rule.notes ?? "")}" placeholder="для ваших заметок" />
+        </label>
+        <label>Когда перестанет работать
+          <input name="expiresAt" type="datetime-local" value="${this.toDatetimeLocalValue(rule.expiresAt)}" />
+        </label>
+        <label>Максимум использований
+          <input name="maxUses" type="number" min="1" value="${rule.maxUses ?? ""}" />
+        </label>
+        <label>Только один успешный вход
+          <input name="firstUseOnly" type="checkbox" ${rule.firstUseOnly ? "checked" : ""} />
+        </label>
+        <div class="admin-stats">
+          <p class="admin-rule-meta">Всего попыток: ${rule.usageCount}</p>
+          <p class="admin-rule-meta">Успешных входов: ${rule.successCount}</p>
+          <p class="admin-rule-meta">Ошибок: ${rule.failCount}</p>
+          <p class="admin-rule-meta">Последнее использование: ${rule.lastUsedAt ? this.formatTimestamp(rule.lastUsedAt) : "никогда"}</p>
+        </div>
+        <button type="submit">Сохранить правило</button>
+      `;
+      row.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const form = new FormData(row);
+        void this.fetchJson(this.apiUrl(`/api/admin/access-rules/${rule.id}`), {
+          method: "PUT",
+          headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            label: form.get("label"),
+            targetMode: form.get("targetMode"),
+            priority: Number(form.get("priority")),
+            isEnabled: form.get("softDelete") === "on" ? false : form.get("isEnabled") === "on",
+            softDelete: form.get("softDelete") === "on",
+            password: String(form.get("password") ?? ""),
+            notes: String(form.get("notes") ?? ""),
+            expiresAt: String(form.get("expiresAt") ?? ""),
+            maxUses: String(form.get("maxUses") ?? ""),
+            firstUseOnly: form.get("firstUseOnly") === "on"
+          })
+        }).then(() => this.render());
+      });
+      list.append(row);
+    }
+
+    group.append(list);
+    return group;
+  }
+
+  private renderWallets(wallets: WalletEntry[], settings: Record<string, unknown>): HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "admin-list";
 
+    wrap.append(this.renderSettings(settings));
+
     for (const wallet of wallets) {
       const row = document.createElement("form");
-      row.className = "admin-form-row";
+      row.className = "admin-form-row admin-form-card";
       row.innerHTML = `
-        <strong>${wallet.network.toUpperCase()}</strong>
-        <label>Адрес <input name="address" value="${this.escapeHtml(wallet.address)}" /></label>
-        <label>Предупреждение <input name="warningText" value="${this.escapeHtml(wallet.warningText)}" /></label>
-        <label>Включено <input name="isEnabled" type="checkbox" ${wallet.isEnabled ? "checked" : ""} /></label>
+        <div class="admin-form-heading">
+          <strong>${wallet.network.toUpperCase()}</strong>
+          <p>${wallet.title}</p>
+        </div>
+        <label>Адрес кошелька <input name="address" value="${this.escapeHtml(wallet.address)}" /></label>
+        <label>Предупреждение под адресом <input name="warningText" value="${this.escapeHtml(wallet.warningText)}" /></label>
+        <label>Показывать этот кошелек <input name="isEnabled" type="checkbox" ${wallet.isEnabled ? "checked" : ""} /></label>
         <button type="submit">Сохранить кошелек</button>
       `;
       row.addEventListener("submit", (event) => {
@@ -1016,7 +1170,7 @@ export class AppController {
 
   private renderExports(): HTMLElement {
     const wrap = document.createElement("div");
-    wrap.className = "admin-actions";
+    wrap.className = "admin-actions admin-actions-wide";
     for (const kind of ["access_rules", "wallets", "site_settings"]) {
       const anchor = document.createElement("a");
       anchor.href = this.apiUrl(`/api/admin/export?kind=${kind}`);
@@ -1075,6 +1229,28 @@ export class AppController {
       .map((entry) => `<p><span>${this.auditEventLabel(entry.eventType)}</span><strong>${this.formatTimestamp(entry.createdAt)}</strong></p>`)
       .join("");
     return wrap;
+  }
+
+  private modeOptions(modes: ModeSummary[], selectedMode = ""): string {
+    return modes
+      .map((mode) => `<option value="${this.escapeHtml(mode.id)}" ${mode.id === selectedMode ? "selected" : ""}>${this.modeLabel(mode.id)}</option>`)
+      .join("");
+  }
+
+  private modeHelp(modeId: string): string {
+    if (modeId === "home_mode") {
+      return "Публичная домашняя сцена. Обычно открыта всем без пароля.";
+    }
+
+    if (modeId === "proxies_mode") {
+      return "Закрытый режим с прокси. Обычно сюда ведет отдельный пароль.";
+    }
+
+    if (modeId === "admin_mode") {
+      return "Скрытая админка. Доступ сюда должен быть только у вас.";
+    }
+
+    return "Отдельный режим сайта.";
   }
 
   private renderWalletOverlay(wallet: WalletEntry): HTMLElement {
