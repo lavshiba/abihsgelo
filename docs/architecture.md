@@ -29,7 +29,9 @@ Bootstrap safeguard:
 1. Worker receives `GET /api/bootstrap` or `POST /api/auth/enter`.
 2. Worker checks whether D1 already contains any non-deleted `admin_mode` access rule.
 3. If none exists and `ADMIN_BOOTSTRAP_PASSWORD` is configured, Worker seeds one hashed `bootstrap admin access` rule in D1.
-4. Operator uses the hidden password monolith to enter `admin_mode`, then creates permanent rules from hidden admin.
+4. That seeded rule targets only `admin_mode`.
+5. Operator uses the hidden password monolith to enter `admin_mode`, then creates the first `proxies_mode` rule and any later rules from hidden admin.
+6. If D1 is empty and the bootstrap secret is missing, `/healthz` returns a bootstrap failure and deploy checks must fail.
 
 ## Route Surface
 

@@ -806,19 +806,39 @@ export class AppController {
       const row = document.createElement("form");
       row.className = "admin-form-row";
       row.innerHTML = `
-        <strong>${rule.label}</strong>
+        <strong>${rule.label}${rule.softDeletedAt ? " [archived]" : ""}</strong>
         <label>mode
           <input name="targetMode" value="${rule.targetMode}" />
+        </label>
+        <label>label
+          <input name="label" value="${this.escapeHtml(rule.label)}" />
         </label>
         <label>priority
           <input name="priority" type="number" value="${rule.priority}" />
         </label>
         <label>enabled
-          <input name="isEnabled" type="checkbox" ${rule.isEnabled ? "checked" : ""} />
+          <input name="isEnabled" type="checkbox" ${rule.isEnabled ? "checked" : ""} ${rule.softDeletedAt ? "disabled" : ""} />
+        </label>
+        <label>archived
+          <input name="softDelete" type="checkbox" ${rule.softDeletedAt ? "checked" : ""} />
         </label>
         <label>password
           <input name="password" type="text" placeholder="leave empty to keep" />
         </label>
+        <label>notes
+          <input name="notes" value="${this.escapeHtml(rule.notes ?? "")}" />
+        </label>
+        <label>expires at
+          <input name="expiresAt" type="datetime-local" value="${this.toDatetimeLocalValue(rule.expiresAt)}" />
+        </label>
+        <label>max uses
+          <input name="maxUses" type="number" min="1" value="${rule.maxUses ?? ""}" />
+        </label>
+        <label>first use only
+          <input name="firstUseOnly" type="checkbox" ${rule.firstUseOnly ? "checked" : ""} />
+        </label>
+        <p class="admin-rule-meta">usage ${rule.usageCount} | success ${rule.successCount} | fail ${rule.failCount}</p>
+        <p class="admin-rule-meta">last used ${rule.lastUsedAt ? this.formatTimestamp(rule.lastUsedAt) : "never"}</p>
         <button type="submit">save</button>
       `;
       row.addEventListener("submit", (event) => {
@@ -828,10 +848,16 @@ export class AppController {
           method: "PUT",
           headers: { ...this.authHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({
+            label: form.get("label"),
             targetMode: form.get("targetMode"),
             priority: Number(form.get("priority")),
-            isEnabled: form.get("isEnabled") === "on",
-            password: String(form.get("password") ?? "")
+            isEnabled: form.get("softDelete") === "on" ? false : form.get("isEnabled") === "on",
+            softDelete: form.get("softDelete") === "on",
+            password: String(form.get("password") ?? ""),
+            notes: String(form.get("notes") ?? ""),
+            expiresAt: String(form.get("expiresAt") ?? ""),
+            maxUses: String(form.get("maxUses") ?? ""),
+            firstUseOnly: form.get("firstUseOnly") === "on"
           })
         }).then(() => this.render());
       });
@@ -844,7 +870,12 @@ export class AppController {
       <strong>new rule</strong>
       <label>label <input name="label" required /></label>
       <label>mode <input name="targetMode" required /></label>
+      <label>priority <input name="priority" type="number" value="100" /></label>
       <label>password <input name="password" required /></label>
+      <label>notes <input name="notes" /></label>
+      <label>expires at <input name="expiresAt" type="datetime-local" /></label>
+      <label>max uses <input name="maxUses" type="number" min="1" /></label>
+      <label>first use only <input name="firstUseOnly" type="checkbox" /></label>
       <button type="submit">add</button>
     `;
     add.addEventListener("submit", (event) => {
@@ -856,7 +887,12 @@ export class AppController {
         body: JSON.stringify({
           label: form.get("label"),
           targetMode: form.get("targetMode"),
-          password: form.get("password")
+          priority: Number(form.get("priority") ?? 100),
+          password: form.get("password"),
+          notes: form.get("notes"),
+          expiresAt: form.get("expiresAt"),
+          maxUses: form.get("maxUses"),
+          firstUseOnly: form.get("firstUseOnly") === "on"
         })
       }).then(() => this.render());
     });
@@ -1066,5 +1102,23 @@ export class AppController {
       hour: "2-digit",
       minute: "2-digit"
     });
+  }
+
+  private toDatetimeLocalValue(value: string | null): string {
+    if (!value) {
+      return "";
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   }
 }

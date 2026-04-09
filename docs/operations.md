@@ -38,8 +38,15 @@ Before the first production deploy:
 4. deploy Worker
 5. load the public site once so bootstrap seeding can run
 6. enter hidden password flow with the bootstrap password
-7. create permanent admin and protected-mode access rules
-8. rotate or remove the bootstrap secret after permanent admin access is confirmed
+7. confirm that this first password opens `admin_mode` only
+8. create the first `proxies_mode` password from hidden admin
+9. create any later mode passwords from hidden admin
+10. rotate, disable, archive, or replace the bootstrap admin rule after permanent admin access is confirmed
+
+If D1 is empty and `ADMIN_BOOTSTRAP_PASSWORD` is missing:
+- `/healthz` must fail with a bootstrap error
+- `npm run smoke` must fail loudly
+- deploy pipelines must fail before a silent lockout reaches production
 
 ## Panic Mode
 

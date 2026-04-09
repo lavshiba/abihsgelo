@@ -19,6 +19,7 @@
     "build:shared": "tsc -p shared/tsconfig.json",
     "build:frontend": "vite build --config vite.config.ts",
     "build:worker": "tsc -p worker/tsconfig.json",
+    "bootstrap:check": "node scripts/bootstrap-check.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

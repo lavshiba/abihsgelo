@@ -7,8 +7,9 @@
 Production bootstrap path:
 - set `ADMIN_BOOTSTRAP_PASSWORD` as a strong Worker secret before the first live deploy
 - on the first bootstrap or auth request, Worker seeds the first `admin_mode` access rule if D1 has none
+- that password opens only `admin_mode`
 - enter that password through the hidden typographic monolith
-- once inside hidden admin, create permanent access rules and rotate or remove the bootstrap secret
+- once inside hidden admin, create the first `proxies_mode` password yourself, then create or rotate any later rules from hidden admin
 
 This bootstrap path is required to prevent the deadlock where `admin_mode` is locked but `access_rules` is empty.
 
@@ -17,6 +18,7 @@ This bootstrap path is required to prevent the deadlock where `admin_mode` is lo
 - view access rules
 - add password rules
 - rotate passwords
+- archive or restore rules with soft delete
 - enable or disable rules
 - soft-delete rules
 - assign target mode
@@ -54,10 +56,23 @@ Each access rule has:
 - optional `first_use_only`
 - `soft_deleted_at`
 
+Editable from hidden admin:
+- `label`
+- `target_mode`
+- `priority`
+- `password`
+- `notes`
+- `expires_at`
+- `max_uses`
+- `first_use_only`
+- `is_enabled`
+- archive state
+
 The automatically seeded bootstrap rule:
 - targets `admin_mode`
 - is stored hashed in D1 like any other rule
-- should be replaced or rotated after the first successful production admin login
+- should be replaced, rotated, disabled, or archived after the first successful production admin login
+- does not create any password for `proxies_mode`
 
 ## Lock Now
 

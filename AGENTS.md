@@ -16,6 +16,7 @@ Read this file before touching code or docs.
 - Never expose secrets, raw passwords, admin internals, or debug traces in the frontend.
 - Never store raw passwords anywhere. Use worker-side hashing with per-rule salt and a server-side pepper secret.
 - `ADMIN_BOOTSTRAP_PASSWORD` is mandatory for production until the first working `admin_mode` access rule exists in D1.
+- The first working password must unlock only `admin_mode`. `proxies_mode` gets no default password and must be created later from hidden admin.
 - If exact naming or another hard requirement cannot be met, stop and report it instead of silently improvising.
 
 ## Sources Of Truth
@@ -33,6 +34,7 @@ Read this file before touching code or docs.
 - `proxies_mode`: locked by password by default.
 - `admin_mode`: locked by password by default.
 - first production bootstrap must seed the first `admin_mode` access rule from `ADMIN_BOOTSTRAP_PASSWORD` if D1 has no admin rule yet
+- empty D1 without `ADMIN_BOOTSTRAP_PASSWORD` is an invalid deploy and must fail loudly in checks
 
 ## Required Checks Before Push
 

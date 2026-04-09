@@ -1,6 +1,6 @@
 import type { AdminPayload } from "@abihsgelo/shared";
 import type { Env } from "./db";
-import { addAudit, getBootstrap, getModeState, getProxyPayload, listAccessRules, listModes, listWallets, setSetting } from "./db";
+import { addAudit, getBootstrap, getBootstrapStatus, getModeState, getProxyPayload, listAccessRules, listModes, listWallets, setSetting } from "./db";
 import { refreshProxyState } from "./proxy";
 import { hashPassword, hashToken, randomHex } from "./security";
 
@@ -38,7 +38,13 @@ export default {
       }
 
       if (url.pathname === "/healthz") {
-        return json({ ok: true, service: "abihsgelo" }, 200, corsHeaders);
+        await ensureAdminBootstrapRule(env);
+        const bootstrap = await getBootstrapStatus(env);
+        return json({
+          ok: bootstrap.isReady,
+          service: "abihsgelo",
+          bootstrap
+        }, bootstrap.isReady ? 200 : 503, corsHeaders);
       }
 
       if (url.pathname === "/api/bootstrap" && method === "GET") {
@@ -80,7 +86,7 @@ export default {
           mode: "admin_mode",
           modes: await listModes(env),
           wallets: await listWallets(env),
-          accessRules: await listAccessRules(env),
+          accessRules: await listAccessRules(env, true),
           settings: {
             "donate.visible": await getBootstrap(env).then((value) => value.donateVisible),
             panic_mode: await env.DB.prepare(`SELECT value_json FROM site_settings WHERE key = 'panic_mode'`).first<{ value_json: string }>().then((row) => row ? JSON.parse(row.value_json) : false)
@@ -192,7 +198,7 @@ export default {
 
 async function authenticate(env: Env, password: string): Promise<{ ok: boolean; mode?: string; token?: string }> {
   await ensureAdminBootstrapRule(env);
-  const rules = await listAccessRules(env);
+  const rules = await listAccessRules(env, false);
   const now = Date.now();
 
   for (const rule of rules) {
@@ -359,8 +365,20 @@ async function createAccessRule(env: Env, body: JsonBody): Promise<void> {
       id, label, password_hash, password_salt, target_mode, is_enabled, priority, notes,
       usage_count, success_count, fail_count, last_used_at, created_at, updated_at,
       expires_at, max_uses, first_use_only, soft_deleted_at
-    ) VALUES (?1, ?2, ?3, ?4, ?5, 1, 100, NULL, 0, 0, 0, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, NULL, 0, NULL)`
-  ).bind(id, String(body.label ?? id), hash, salt, String(body.targetMode ?? "home_mode")).run();
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, 0, 0, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?9, ?10, ?11, NULL)`
+  ).bind(
+    id,
+    String(body.label ?? id),
+    hash,
+    salt,
+    String(body.targetMode ?? "home_mode"),
+    body.isEnabled === false ? 0 : 1,
+    Number(body.priority ?? 100),
+    body.notes ? String(body.notes) : null,
+    normalizeOptionalDate(body.expiresAt),
+    normalizeOptionalNumber(body.maxUses),
+    body.firstUseOnly ? 1 : 0
+  ).run();
   await addAudit(env, "admin_change_access_rule", "admin", { id });
 }
 
@@ -415,24 +433,39 @@ async function ensureAdminBootstrapRule(env: Env): Promise<void> {
 
 async function updateAccessRule(env: Env, id: string, body: JsonBody): Promise<void> {
   let passwordFragment = "";
-  const bindValues: unknown[] = [String(body.targetMode ?? "home_mode"), Number(body.priority ?? 100), body.isEnabled ? 1 : 0];
+  const bindValues: unknown[] = [
+    String(body.label ?? id),
+    String(body.targetMode ?? "home_mode"),
+    Number(body.priority ?? 100),
+    body.isEnabled ? 1 : 0,
+    body.notes ? String(body.notes) : null,
+    normalizeOptionalDate(body.expiresAt),
+    normalizeOptionalNumber(body.maxUses),
+    body.firstUseOnly ? 1 : 0,
+    body.softDelete ? 1 : 0
+  ];
 
   if (body.password && String(body.password).trim()) {
     const salt = randomHex(16);
     const hash = await hashPassword(String(body.password), salt, env.PEPPER);
-    passwordFragment = ", password_hash = ?4, password_salt = ?5";
+    passwordFragment = ", password_hash = ?10, password_salt = ?11";
     bindValues.push(hash, salt);
   }
 
   bindValues.push(id);
-  const placeholder = passwordFragment ? [1, 2, 3, 4, 5, 6] : [1, 2, 3, 4];
   const statement = `UPDATE access_rules
-    SET target_mode = ?1,
-        priority = ?2,
-        is_enabled = ?3,
+    SET label = ?1,
+        target_mode = ?2,
+        priority = ?3,
+        is_enabled = ?4,
+        notes = ?5,
+        expires_at = ?6,
+        max_uses = ?7,
+        first_use_only = ?8,
+        soft_deleted_at = CASE WHEN ?9 = 1 THEN COALESCE(soft_deleted_at, CURRENT_TIMESTAMP) ELSE NULL END,
         updated_at = CURRENT_TIMESTAMP
         ${passwordFragment}
-    WHERE id = ?${placeholder.at(-1)}`;
+    WHERE id = ?${passwordFragment ? 12 : 10}`;
   await env.DB.prepare(statement).bind(...bindValues).run();
   await addAudit(env, "admin_change_access_rule", "admin", { id });
 }
@@ -471,23 +504,35 @@ async function updateWallet(env: Env, id: string, body: JsonBody): Promise<void>
 }
 
 async function getHealth(env: Env): Promise<Record<string, unknown>> {
+  const bootstrap = await getBootstrapStatus(env);
   const state = await env.DB.prepare(
     `SELECT last_live_refresh_at, last_snapshot_at, last_refresh_status, stale_reason, session_version FROM proxy_state WHERE id = 1`
   ).first<Record<string, unknown>>();
-  const adminRule = await env.DB.prepare(
-    `SELECT id
-     FROM access_rules
-     WHERE target_mode = 'admin_mode' AND soft_deleted_at IS NULL
-     LIMIT 1`
-  ).first<{ id: string }>();
   return {
-    worker: "ok",
+    worker: bootstrap.isReady ? "ok" : "bootstrap_blocked",
     d1: "ok",
     analytics: "ok",
-    adminBootstrapConfigured: Boolean(env.ADMIN_BOOTSTRAP_PASSWORD?.trim()),
-    adminRulePresent: Boolean(adminRule?.id),
+    adminBootstrapConfigured: bootstrap.hasBootstrapSecret,
+    adminRulePresent: bootstrap.hasAdminRule,
+    bootstrapMessage: bootstrap.message,
     ...state
   };
+}
+
+function normalizeOptionalDate(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeOptionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const normalized = Number(value);
+  return Number.isFinite(normalized) && normalized > 0 ? normalized : null;
 }
 
 async function exportJson(env: Env, kind: string, extraHeaders: HeadersInit = {}): Promise<Response> {

@@ -64,13 +64,16 @@ Bootstrap flow:
 - deploy Worker with `ADMIN_BOOTSTRAP_PASSWORD` set as a long random secret
 - on the first live `GET /api/bootstrap` or `POST /api/auth/enter`, the Worker checks whether D1 already has any non-deleted `admin_mode` access rule
 - if no admin rule exists yet, the Worker seeds exactly one hashed D1 rule labeled `bootstrap admin access` that targets `admin_mode`
-- operator enters the hidden password monolith with that bootstrap password, reaches hidden admin, creates permanent access rules, and then rotates or removes the bootstrap secret
+- that bootstrap password opens only `admin_mode`
+- `proxies_mode` gets no default password and stays locked until you create one yourself from hidden admin
+- operator enters the hidden password monolith with `ADMIN_BOOTSTRAP_PASSWORD`, reaches hidden admin, creates a `proxies_mode` rule, and then manages all later rules from hidden admin
 
 Properties:
 - raw bootstrap password is never stored in D1
 - seeded rule still uses per-rule salt plus server-side pepper hashing
 - bootstrap does not add a second backend or bypass D1
 - if an admin rule already exists, bootstrap seeding does nothing
+- if D1 has no admin rule and `ADMIN_BOOTSTRAP_PASSWORD` is missing, health/smoke/deploy must fail loudly and the deploy is not considered valid
 
 ## Cloudflare Login And Resource Creation
 
@@ -127,6 +130,17 @@ Production secrets to set in Cloudflare Worker:
 - `SESSION_SECRET`
 - `ADMIN_BOOTSTRAP_PASSWORD`
 - optional `TURNSTILE_SECRET`
+
+## First Login Sequence
+
+1. Set `PEPPER`, `SESSION_SECRET`, and `ADMIN_BOOTSTRAP_PASSWORD`.
+2. Deploy the Worker and Pages project.
+3. Open the public site once so the Worker can seed the first `admin_mode` access rule if D1 is still empty.
+4. Tap into the hidden password flow and enter `ADMIN_BOOTSTRAP_PASSWORD`.
+5. Hidden admin opens.
+6. In hidden admin, create a password rule for `proxies_mode`.
+7. Create any additional rules you need for future modes.
+8. Rotate, disable, archive, or replace the bootstrap admin rule from hidden admin as needed.
 
 ## Scripts
 

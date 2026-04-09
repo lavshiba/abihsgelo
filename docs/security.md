@@ -8,6 +8,7 @@
 - no raw passwords in D1, logs, or analytics
 - no protected fallback content in `snapshot.json`
 - production bootstrap must not deadlock hidden admin when D1 starts without any admin rule
+- bootstrap must not create any non-admin password implicitly
 
 ## Password Storage
 
@@ -17,6 +18,8 @@
 - store `password_hash` and `password_salt`
 - `PEPPER` exists only as a Worker secret
 - bootstrap password follows the same hashing path when the Worker seeds the first `admin_mode` rule from `ADMIN_BOOTSTRAP_PASSWORD`
+- the seeded bootstrap rule targets only `admin_mode`
+- no default `proxies_mode` password is created
 
 ## Sessions
 

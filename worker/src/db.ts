@@ -16,6 +16,13 @@ export interface AuthRuleRecord extends AccessRuleSummary {
   passwordSalt: string;
 }
 
+export interface BootstrapStatus {
+  isReady: boolean;
+  hasAdminRule: boolean;
+  hasBootstrapSecret: boolean;
+  message: string;
+}
+
 export async function getBootstrap(env: Env): Promise<BootstrapPayload> {
   const defaultMode = await env.DB.prepare(
     `SELECT id FROM content_modes WHERE is_default_public = 1 AND is_enabled = 1 LIMIT 1`
@@ -61,15 +68,15 @@ export async function listModes(env: Env): Promise<ModeSummary[]> {
   }));
 }
 
-export async function listAccessRules(env: Env): Promise<AuthRuleRecord[]> {
+export async function listAccessRules(env: Env, includeSoftDeleted = false): Promise<AuthRuleRecord[]> {
   const result = await env.DB.prepare(
     `SELECT id, label, password_hash AS passwordHash, password_salt AS passwordSalt, target_mode AS targetMode,
             is_enabled AS isEnabled, priority, notes, usage_count AS usageCount, success_count AS successCount,
             fail_count AS failCount, last_used_at AS lastUsedAt, created_at AS createdAt, updated_at AS updatedAt,
             expires_at AS expiresAt, max_uses AS maxUses, first_use_only AS firstUseOnly, soft_deleted_at AS softDeletedAt
      FROM access_rules
-     WHERE soft_deleted_at IS NULL
-     ORDER BY priority DESC, updated_at DESC`
+     ${includeSoftDeleted ? "" : "WHERE soft_deleted_at IS NULL"}
+     ORDER BY CASE WHEN soft_deleted_at IS NULL THEN 0 ELSE 1 END ASC, priority DESC, updated_at DESC`
   ).all<AuthRuleRecord>();
 
   return result.results.map((rule) => ({
@@ -149,4 +156,39 @@ export async function addAudit(env: Env, eventType: string, actorType: string, m
     `INSERT INTO audit_log (event_type, actor_type, access_rule_id, mode_id, metadata_json, created_at)
      VALUES (?1, ?2, ?3, ?4, ?5, CURRENT_TIMESTAMP)`
   ).bind(eventType, actorType, accessRuleId, modeId, JSON.stringify(metadata)).run();
+}
+
+export async function getBootstrapStatus(env: Env): Promise<BootstrapStatus> {
+  const adminRule = await env.DB.prepare(
+    `SELECT id
+     FROM access_rules
+     WHERE target_mode = 'admin_mode' AND soft_deleted_at IS NULL
+     LIMIT 1`
+  ).first<{ id: string }>();
+  const hasBootstrapSecret = Boolean(env.ADMIN_BOOTSTRAP_PASSWORD?.trim());
+
+  if (adminRule?.id) {
+    return {
+      isReady: true,
+      hasAdminRule: true,
+      hasBootstrapSecret,
+      message: "admin bootstrap ready"
+    };
+  }
+
+  if (hasBootstrapSecret) {
+    return {
+      isReady: true,
+      hasAdminRule: false,
+      hasBootstrapSecret: true,
+      message: "admin bootstrap secret present; first admin rule will be seeded on bootstrap/auth"
+    };
+  }
+
+  return {
+    isReady: false,
+    hasAdminRule: false,
+    hasBootstrapSecret: false,
+    message: "missing required ADMIN_BOOTSTRAP_PASSWORD for empty database bootstrap"
+  };
 }
