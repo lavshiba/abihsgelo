@@ -67,6 +67,7 @@ a {
   padding: 6.4vh 20px 28px;
   text-align: center;
   transition: opacity 180ms ease, filter 180ms ease, transform 180ms ease;
+  animation: home-scene-arrive 420ms ease both;
 }
 
 .home-shell.is-dissolving {
@@ -81,6 +82,7 @@ a {
   align-items: center;
   gap: 18px;
   transform: translateY(-2vh);
+  animation: text-fade-up 360ms ease both;
 }
 
 .home-title,
@@ -118,9 +120,27 @@ a {
 }
 
 .tg-button span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tg-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.tg-icon svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: rgba(255, 255, 255, 0.88);
+  transform: translateX(0.5px);
+}
+
+.tg-button span,
+.tg-icon {
   font-size: 0.82rem;
-  letter-spacing: 0.08em;
-  text-transform: lowercase;
 }
 
 .home-empty-plane {
@@ -134,6 +154,9 @@ a {
   align-items: center;
   align-self: end;
   transform: translateY(-1.5vh);
+  animation: donate-arrive 440ms ease both;
+  animation-delay: 120ms;
+  animation-fill-mode: both;
 }
 
 .donate-label {
@@ -170,6 +193,7 @@ a {
   font-size: 0.76rem;
   letter-spacing: 0.06em;
   text-transform: lowercase;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
 }
 
 .tg-button:active,
@@ -580,6 +604,30 @@ a {
   }
 }
 
+@keyframes home-scene-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes donate-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(-1.5vh);
+  }
+}
+
 @keyframes card-rise {
   from {
     opacity: 0;
@@ -680,6 +728,11 @@ a {
   animation: section-arrive 260ms ease both;
 }
 
+.admin-actions {
+  grid-template-columns: repeat(auto-fit, minmax(180px, max-content));
+  align-items: center;
+}
+
 .admin-list,
 .admin-actions {
   display: grid;
@@ -705,6 +758,13 @@ a {
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.admin-form-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  transform: translateY(-1px);
 }
 
 .admin-form-row label {
@@ -726,6 +786,12 @@ a {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-soft);
+}
+
+.admin-form-row strong {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
 }
 
 .admin-form-row input,

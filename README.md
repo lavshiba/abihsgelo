@@ -149,6 +149,7 @@ The hidden password scene keeps its invisible input model in production:
 - an invisible focused text control captures keyboard input for the typographic monolith
 - desktop `Enter` and mobile `enter/done/go` actions are both treated as submit paths
 - mobile line-break insertion in the hidden control is normalized into submit instead of leaving a visible form artifact
+- automated tests cover desktop `Enter`, mobile `beforeinput insertLineBreak`, and newline fallback inside the hidden control
 
 ## Scripts
 

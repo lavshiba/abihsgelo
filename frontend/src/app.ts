@@ -159,7 +159,11 @@ export class AppController {
       <section class="home-top-stack">
         <p class="home-title">oleg shiba // abihsgelo</p>
         <a class="tg-button" data-interactive="true" href="${this.bootstrap.telegramUrl}" aria-label="Telegram" rel="noreferrer">
-          <span>tg</span>
+          <span class="tg-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M19.77 4.43 3.86 10.56c-1.09.44-1.08 1.05-.2 1.32l4.08 1.27 1.58 5.03c.19.53.1.74.66.74.43 0 .62-.2.86-.43l2-1.94 4.17 3.08c.77.42 1.32.2 1.51-.71l2.7-12.72c.28-1.12-.42-1.63-1.45-1.17Z"></path>
+            </svg>
+          </span>
         </a>
         <p class="home-year">${this.bootstrap.yearLabel}</p>
       </section>

@@ -56,6 +56,11 @@ When validating a release, verify both:
 
 The implementation uses an invisible focused text control behind the typographic monolith, so regressions usually show up as keyboard-submit failures rather than visual breakage.
 
+Current automated coverage includes:
+- desktop-style `Enter` submit
+- mobile-like `beforeinput` line-break submit
+- newline fallback normalization inside the hidden control
+
 ## Panic Mode
 
 Panic mode is a site setting. When enabled:

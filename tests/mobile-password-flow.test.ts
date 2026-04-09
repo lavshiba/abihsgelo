@@ -15,7 +15,7 @@ const bootstrapPayload = {
   panicMode: false
 } as const;
 
-describe("mobile password flow", () => {
+describe("password flow", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     document.body.innerHTML = '<div id="app"></div>';
@@ -132,5 +132,65 @@ describe("mobile password flow", () => {
       expect.stringContaining("/api/auth/enter"),
       expect.objectContaining({ method: "POST" })
     );
+  });
+
+  it("submits on desktop Enter and opens admin mode", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith("/snapshot.json")) {
+        return new Response(JSON.stringify({ fresh: [], archive: [] }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && (!init?.method || init.method === "GET")) {
+        return new Response(JSON.stringify(bootstrapPayload), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/auth/enter")) {
+        return new Response(JSON.stringify({ ok: true, mode: "admin_mode", token: "desktop-token" }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/admin/bootstrap")) {
+        return new Response(JSON.stringify({
+          mode: "admin_mode",
+          modes: [],
+          wallets: [],
+          accessRules: [],
+          settings: {},
+          health: {},
+          audit: []
+        }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = new AppController(document.querySelector("#app") as HTMLDivElement);
+    await app.start();
+
+    (document.querySelector(".home-shell") as HTMLElement).click();
+    await vi.advanceTimersByTimeAsync(280);
+
+    const input = document.querySelector(".password-hidden-input") as HTMLTextAreaElement;
+    input.value = "olegadmin";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await Promise.resolve();
+
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(340);
+    await Promise.resolve();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/auth/enter"),
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(document.querySelector(".admin-shell")).toBeTruthy();
   });
 });
