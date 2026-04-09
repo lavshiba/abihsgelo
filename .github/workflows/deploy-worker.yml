@@ -25,5 +25,7 @@ jobs:
       - run: npm run test
       - run: npm run build
       - run: npm run smoke
+      - name: Apply D1 migrations
+        run: npx wrangler@4.81.0 d1 migrations apply DB --config worker/wrangler.toml --remote
       - name: Deploy Worker
         run: npx wrangler@4.81.0 deploy --config worker/wrangler.toml

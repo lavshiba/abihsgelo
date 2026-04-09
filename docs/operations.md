@@ -15,6 +15,7 @@ Key signals:
 - stale warning
 - source fetch failures
 - fresh proxy rows are present after a successful live refresh
+- proxy numbering remains monotonic and site-local after refreshes
 
 ## Outage Playbook
 

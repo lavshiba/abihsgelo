@@ -112,6 +112,10 @@ Fresh grid:
 - dense spacing
 - nearly square cards
 - card order newest top-left to oldest bottom-right
+- proxy numbers are site-local running numbers:
+  - first proxy ever seen by the site is `#1`
+  - later proxies keep incrementing without reset
+  - numbers never collapse or renumber when fresh cards push older cards into archive
 - layouts with fewer than 9 cards must stay centered and composed:
   - `1`: one centered card
   - `3`: one complete centered row
@@ -147,6 +151,7 @@ Archive:
 - no springy bounce
 - appearance often includes a slight upward drift
 - archive opens row-by-row from bottom upward
+- archive opens from its own slab without causing the whole proxies scene to flash or fully rerender
 - live proxy update reflows the grid rather than flashing
 - when archive is open, live updates queue quietly and apply only after the view returns to fresh
 - newest incoming top-left card gets only a very thin, short accent

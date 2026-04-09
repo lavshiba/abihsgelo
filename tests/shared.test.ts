@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildProxyTitle, normalizePassword, parseTelegramProxies } from "../shared/src/index";
+import { assignStableProxyNumbers, buildProxyTitle, normalizePassword, parseTelegramProxies } from "../shared/src/index";
 
 describe("shared helpers", () => {
   it("normalizes password case and trim", () => {
@@ -52,5 +52,23 @@ describe("shared helpers", () => {
     const parsed = parseTelegramProxies(html);
     expect(parsed[0]?.proxyNumber).toBe(777);
     expect(parsed[0]?.proxyUrl).toContain("tg://proxy?server=example.com");
+  });
+
+  it("assigns stable site proxy numbers that keep increasing for new proxies", () => {
+    const items = [
+      { id: "proxy-103", proxyNumber: 103, proxyUrl: "tg://proxy?server=3", postedAt: "2026-04-09T12:00:00+00:00", sourceMessageId: "103" },
+      { id: "proxy-102", proxyNumber: 102, proxyUrl: "tg://proxy?server=2", postedAt: "2026-04-09T11:00:00+00:00", sourceMessageId: "102" },
+      { id: "proxy-101", proxyNumber: 101, proxyUrl: "tg://proxy?server=1", postedAt: "2026-04-09T10:00:00+00:00", sourceMessageId: "101" }
+    ];
+
+    const first = assignStableProxyNumbers(items, []);
+    expect(first.items.map((item) => item.proxyNumber)).toEqual([3, 2, 1]);
+
+    const nextItems = [
+      { id: "proxy-104", proxyNumber: 104, proxyUrl: "tg://proxy?server=4", postedAt: "2026-04-09T13:00:00+00:00", sourceMessageId: "104" },
+      ...items
+    ];
+    const second = assignStableProxyNumbers(nextItems, first.catalog);
+    expect(second.items.map((item) => item.proxyNumber)).toEqual([4, 3, 2, 1]);
   });
 });

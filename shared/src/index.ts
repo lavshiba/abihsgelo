@@ -94,6 +94,11 @@ export interface SnapshotPayload {
   archive: ProxyItem[];
 }
 
+export interface ProxyCatalogEntry {
+  sourceMessageId: string;
+  proxyNumber: number;
+}
+
 export function normalizePassword(input: string): string {
   return input.trim().toLocaleUpperCase("en-US");
 }
@@ -137,4 +142,38 @@ export function parseTelegramProxies(html: string): ProxyItem[] {
   }
 
   return items.sort((left, right) => right.proxyNumber - left.proxyNumber);
+}
+
+export function assignStableProxyNumbers(items: ProxyItem[], catalog: ProxyCatalogEntry[]): {
+  items: ProxyItem[];
+  catalog: ProxyCatalogEntry[];
+} {
+  const numberBySource = new Map(catalog.map((entry) => [entry.sourceMessageId, entry.proxyNumber]));
+  let nextNumber = Math.max(0, ...catalog.map((entry) => entry.proxyNumber)) + 1;
+
+  const unseen = items
+    .filter((item) => !numberBySource.has(item.sourceMessageId))
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.postedAt);
+      const rightTime = Date.parse(right.postedAt);
+      if (!Number.isNaN(leftTime) && !Number.isNaN(rightTime) && leftTime !== rightTime) {
+        return leftTime - rightTime;
+      }
+      return Number(left.sourceMessageId) - Number(right.sourceMessageId);
+    });
+
+  for (const item of unseen) {
+    numberBySource.set(item.sourceMessageId, nextNumber);
+    nextNumber += 1;
+  }
+
+  return {
+    items: items.map((item) => ({
+      ...item,
+      proxyNumber: numberBySource.get(item.sourceMessageId) ?? item.proxyNumber
+    })),
+    catalog: [...numberBySource.entries()]
+      .map(([sourceMessageId, proxyNumber]) => ({ sourceMessageId, proxyNumber }))
+      .sort((left, right) => left.proxyNumber - right.proxyNumber)
+  };
 }

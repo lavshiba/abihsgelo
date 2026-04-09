@@ -1,5 +1,5 @@
 import type { ProxyItem } from "@abihsgelo/shared";
-import { parseTelegramProxies } from "@abihsgelo/shared";
+import { assignStableProxyNumbers, parseTelegramProxies } from "@abihsgelo/shared";
 import type { Env } from "./db";
 import { addAudit } from "./db";
 
@@ -27,8 +27,26 @@ export async function refreshProxyState(env: Env): Promise<void> {
       throw new Error("proxy source returned zero parsed items");
     }
 
-    const fresh = items.slice(0, 9);
-    const archive = items.slice(9, 129);
+    const existingCatalog = (
+      await env.DB.prepare(
+        `SELECT source_message_id AS sourceMessageId, proxy_number AS proxyNumber
+         FROM proxy_catalog
+         ORDER BY proxy_number ASC`
+      ).all<{ sourceMessageId: string; proxyNumber: number }>()
+    ).results;
+
+    const numbered = assignStableProxyNumbers(items, existingCatalog);
+    const fresh = numbered.items.slice(0, 9);
+    const archive = numbered.items.slice(9, 129);
+    const knownSourceIds = new Set(existingCatalog.map((entry) => entry.sourceMessageId));
+    const catalogStatements = numbered.catalog
+      .filter((entry) => !knownSourceIds.has(entry.sourceMessageId))
+      .map((entry) =>
+        env.DB.prepare(
+          `INSERT INTO proxy_catalog (source_message_id, proxy_number, first_seen_at)
+           VALUES (?1, ?2, CURRENT_TIMESTAMP)`
+        ).bind(entry.sourceMessageId, entry.proxyNumber)
+      );
 
     await env.DB.batch([
       env.DB.prepare(`DELETE FROM proxy_items_fresh`),
@@ -36,6 +54,7 @@ export async function refreshProxyState(env: Env): Promise<void> {
     ]);
 
     const statements = [
+      ...catalogStatements,
       ...fresh.map((item) =>
         env.DB.prepare(
           `INSERT INTO proxy_items_fresh (id, proxy_number, proxy_url, posted_at, source_message_id, created_at, click_count)
@@ -59,7 +78,10 @@ export async function refreshProxyState(env: Env): Promise<void> {
     ];
 
     await env.DB.batch(statements);
-    await addAudit(env, "admin_refresh_now", "system", { count: fresh.length });
+    await addAudit(env, "admin_refresh_now", "system", {
+      count: fresh.length,
+      newestProxyNumber: fresh[0]?.proxyNumber ?? null
+    });
   } catch (error) {
     await env.DB.prepare(
       `UPDATE proxy_state

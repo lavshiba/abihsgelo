@@ -67,6 +67,7 @@ Protected:
 - `site_settings`: donate visibility, stale thresholds, snapshot controls
 - `proxy_items_fresh`: up to 9 latest proxy entries
 - `proxy_items_archive`: older proxy entries
+- `proxy_catalog`: stable site-local proxy numbering keyed by source message id
 - `proxy_state`: health and refresh metadata
 - `sessions`: opaque session storage and version invalidation
 - `audit_log`: security and admin history
@@ -77,6 +78,7 @@ Protected:
 - Fetches `https://t.me/s/ProxyMTProto`
 - Parses latest entries
 - Upserts fresh 9 and archives overflow
+- Preserves a monotonic site-local `proxy_number` sequence that starts at `1` and never renumbers older proxies
 - Updates `proxy_state`
 - Emits Analytics event
 

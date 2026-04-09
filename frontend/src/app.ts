@@ -654,41 +654,61 @@ export class AppController {
       <span class="archive-trigger-label">прокси постарее (${items.length})</span>
       <span class="archive-trigger-arrow" aria-hidden="true">↓</span>
     `;
+    trigger.setAttribute("aria-expanded", this.archiveOpen ? "true" : "false");
+
+    const grid = document.createElement("div");
+    grid.className = "archive-grid";
+    const columns = window.innerWidth >= 920 ? 10 : 5;
+    const rowCount = Math.max(1, Math.ceil(items.length / columns));
+
+    items.forEach((item, index) => {
+      const card = document.createElement("button");
+      const row = Math.floor(index / columns);
+      const delay = (rowCount - row - 1) * 44;
+      card.type = "button";
+      card.className = "archive-card";
+      card.style.transitionDelay = `${delay}ms`;
+      card.textContent = `#${item.proxyNumber}`;
+      card.addEventListener("click", () => {
+        void this.openProxy(item, true);
+      });
+      grid.append(card);
+    });
+
+    const syncArchiveState = (): void => {
+      section.classList.toggle("is-open", this.archiveOpen);
+      trigger.setAttribute("aria-expanded", this.archiveOpen ? "true" : "false");
+    };
+
     trigger.addEventListener("click", () => {
       this.archiveOpen = !this.archiveOpen;
-      this.pendingScrollTarget = this.archiveOpen ? "archive" : "fresh";
       this.track(this.archiveOpen ? "archive_open" : "archive_close");
+      syncArchiveState();
 
-      if (!this.archiveOpen && this.queuedProxiesPayload) {
-        this.applyProxyPayload(this.queuedProxiesPayload, true);
-        this.queuedProxiesPayload = null;
+      if (this.archiveOpen) {
+        window.setTimeout(() => {
+          section.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 40);
+        return;
       }
 
-      this.render();
+      this.root.querySelector<HTMLElement>(".fresh-grid")?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+      if (!this.queuedProxiesPayload) {
+        return;
+      }
+
+      const queued = this.queuedProxiesPayload;
+      this.queuedProxiesPayload = null;
+      window.setTimeout(() => {
+        this.applyProxyPayload(queued, true);
+        if (this.scene === "mode" && this.session.mode === "proxies_mode") {
+          this.render();
+        }
+      }, 260);
     });
     section.append(trigger);
-
-    if (this.archiveOpen) {
-      const grid = document.createElement("div");
-      grid.className = "archive-grid";
-      const columns = window.innerWidth >= 920 ? 10 : 5;
-      const rowCount = Math.max(1, Math.ceil(items.length / columns));
-
-      items.forEach((item, index) => {
-        const card = document.createElement("button");
-        const row = Math.floor(index / columns);
-        const delay = (rowCount - row - 1) * 38;
-        card.type = "button";
-        card.className = "archive-card";
-        card.style.animationDelay = `${delay}ms`;
-        card.textContent = `#${item.proxyNumber}`;
-        card.addEventListener("click", () => {
-          void this.openProxy(item, true);
-        });
-        grid.append(card);
-      });
-      section.append(grid);
-    }
+    section.append(grid);
 
     return section;
   }

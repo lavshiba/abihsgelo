@@ -601,6 +601,19 @@ a {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(5, minmax(0, 1fr));
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;
+  transition: max-height 380ms ease, opacity 220ms ease, transform 380ms ease;
+}
+
+.archive-zone.is-open .archive-grid {
+  max-height: 2200px;
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 
 .archive-card {
@@ -608,7 +621,19 @@ a {
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-soft);
-  animation: archive-rise 220ms ease both;
+  opacity: 0;
+  transform: translateY(-12px) scale(0.986);
+  transition:
+    opacity 260ms ease,
+    transform 380ms ease,
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 180ms ease;
+}
+
+.archive-zone.is-open .archive-card {
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 @keyframes section-arrive {
@@ -668,18 +693,6 @@ a {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes archive-rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 
