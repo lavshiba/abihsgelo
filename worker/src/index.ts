@@ -67,7 +67,7 @@ export default {
         }
 
         const body = await safeJson(request);
-        const result = await authenticate(env, String(body.password ?? ""));
+        const result = await authenticate(env, String(body.password ?? ""), ctx);
         return json(result, 200, corsHeaders);
       }
 
@@ -196,7 +196,7 @@ export default {
   }
 } satisfies ExportedHandler<Env>;
 
-async function authenticate(env: Env, password: string): Promise<{ ok: boolean; mode?: string; token?: string }> {
+async function authenticate(env: Env, password: string, ctx: ExecutionContext): Promise<{ ok: boolean; mode?: string; token?: string }> {
   await ensureAdminBootstrapRule(env);
   const rules = await listAccessRules(env, false);
   const now = Date.now();
@@ -242,19 +242,27 @@ async function authenticate(env: Env, password: string): Promise<{ ok: boolean; 
       ).bind(rule.id)
     ]);
 
-    await addAudit(env, "password_success", "auth", { targetMode: rule.targetMode }, rule.id, rule.targetMode);
-    env.ANALYTICS.writeDataPoint({
-      blobs: ["password_success", rule.id, rule.targetMode],
-      doubles: [Date.now()]
-    });
+    ctx.waitUntil(
+      Promise.resolve().then(async () => {
+        await addAudit(env, "password_success", "auth", { targetMode: rule.targetMode }, rule.id, rule.targetMode);
+        env.ANALYTICS.writeDataPoint({
+          blobs: ["password_success", rule.id, rule.targetMode],
+          doubles: [Date.now()]
+        });
+      })
+    );
     return { ok: true, mode: rule.targetMode, token };
   }
 
-  await addAudit(env, "password_fail", "auth");
-  env.ANALYTICS.writeDataPoint({
-    blobs: ["password_fail"],
-    doubles: [Date.now()]
-  });
+  ctx.waitUntil(
+    Promise.resolve().then(async () => {
+      await addAudit(env, "password_fail", "auth");
+      env.ANALYTICS.writeDataPoint({
+        blobs: ["password_fail"],
+        doubles: [Date.now()]
+      });
+    })
+  );
   return { ok: false };
 }
 
