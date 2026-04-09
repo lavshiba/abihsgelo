@@ -111,18 +111,19 @@ export function buildProxyTitle(count: number): string {
 }
 
 export function parseTelegramProxies(html: string): ProxyItem[] {
-  const blocks = [...html.matchAll(/data-post="ProxyMTProto\/(\d+)"[\s\S]*?<time datetime="([^"]+)"[\s\S]*?<a class="tgme_widget_message_date" href="([^"]+)"/g)];
   const items: ProxyItem[] = [];
+  const markers = [...html.matchAll(/data-post="ProxyMTProto\/(\d+)"/g)];
 
-  for (const match of blocks) {
+  for (let index = 0; index < markers.length; index += 1) {
+    const match = markers[index];
     const sourceMessageId = match[1];
-    const postedAt = match[2];
-    const messageUrl = match[3];
-    const sliceStart = match.index ?? 0;
-    const slice = html.slice(sliceStart, sliceStart + 2000);
-    const proxyMatch = slice.match(/href="(https:\/\/t\.me\/proxy\?[^"]+)"/);
+    const blockStart = match.index ?? 0;
+    const blockEnd = markers[index + 1]?.index ?? html.length;
+    const block = html.slice(blockStart, blockEnd);
+    const timeMatch = block.match(/<time datetime="([^"]+)"/);
+    const proxyMatch = block.match(/href="((?:https:\/\/t\.me\/proxy\?|tg:\/\/proxy\?)[^"]+)"/);
 
-    if (!proxyMatch) {
+    if (!timeMatch || !proxyMatch) {
       continue;
     }
 
@@ -130,8 +131,8 @@ export function parseTelegramProxies(html: string): ProxyItem[] {
       id: `proxy-${sourceMessageId}`,
       proxyNumber: Number(sourceMessageId),
       proxyUrl: proxyMatch[1].replace(/&amp;/g, "&"),
-      postedAt,
-      sourceMessageId: sourceMessageId || messageUrl
+      postedAt: timeMatch[1],
+      sourceMessageId
     });
   }
 

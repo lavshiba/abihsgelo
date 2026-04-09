@@ -63,10 +63,14 @@ export class AppController {
   private currentProxiesPayload: ProxiesPayload | null = null;
   private queuedProxiesPayload: ProxiesPayload | null = null;
   private proxiesLoading = false;
+  private proxiesLoadState: "idle" | "loading" | "ready" | "error" = "idle";
   private pollingHandle: number | null = null;
   private highlightProxyId: string | null = null;
   private highlightHandle: number | null = null;
   private pendingScrollTarget: ScrollTarget = null;
+  private adminPayload: AdminPayload | null = null;
+  private adminLoading = false;
+  private adminError: string | null = null;
 
   public constructor(root: HTMLDivElement) {
     this.root = root;
@@ -114,7 +118,10 @@ export class AppController {
       }
     } else if (this.session.mode === "admin_mode") {
       this.stopPolling();
-      void this.renderAdminScene();
+      this.root.append(this.renderAdminScene());
+      if (!this.adminPayload && !this.adminLoading) {
+        void this.ensureAdminPayload(true);
+      }
     }
 
     if (this.walletOverlay) {
@@ -497,7 +504,13 @@ export class AppController {
         if (result.mode === "proxies_mode") {
           this.archiveOpen = false;
           this.pendingScrollTarget = "fresh";
+          this.proxiesLoadState = "loading";
           void this.ensureProxiesPayload(true);
+        }
+        if (result.mode === "admin_mode") {
+          this.adminError = null;
+          this.adminLoading = true;
+          void this.ensureAdminPayload(true);
         }
         this.render();
       }, 320);
@@ -509,17 +522,22 @@ export class AppController {
 
   private renderProxiesScene(): HTMLElement {
     const payload = this.currentProxiesPayload ?? this.buildProxyFallbackPayload();
+    const hasItems = payload.fresh.length > 0;
     const shell = document.createElement("main");
     shell.className = `proxies-shell${this.archiveOpen ? " archive-visible" : ""}`;
     shell.innerHTML = `
       <section class="proxies-stack">
-        <h1>${payload.title}</h1>
-        <p class="status-line">последнее успешное обновление: ${payload.lastSuccessfulRefreshAt ? this.formatTimestamp(payload.lastSuccessfulRefreshAt) : "—"}</p>
+        <h1>${this.proxiesLoadState === "loading" && !hasItems ? "загружаем свежие прокси..." : payload.title}</h1>
+        <p class="status-line">${this.proxyStatusLine(payload, hasItems)}</p>
         ${payload.isStale ? `<p class="stale-line">${payload.staleReason ?? "временно показана последняя сохраненная версия"}</p>` : ""}
       </section>
     `;
 
-    shell.append(this.renderFreshGrid(payload.fresh));
+    if (hasItems) {
+      shell.append(this.renderFreshGrid(payload.fresh));
+    } else {
+      shell.append(this.renderProxiesEmptyState());
+    }
 
     if (payload.archive.length > 0) {
       shell.append(this.renderArchive(payload.archive));
@@ -532,7 +550,7 @@ export class AppController {
     const fresh = this.snapshot.fresh.slice(0, 9);
     return {
       mode: "proxies_mode",
-      title: buildProxyTitle(fresh.length),
+      title: fresh.length > 0 ? buildProxyTitle(fresh.length) : "загружаем свежие прокси...",
       lastSuccessfulRefreshAt: null,
       isStale: true,
       staleReason: "временно показана последняя сохраненная версия",
@@ -647,12 +665,18 @@ export class AppController {
     }
 
     this.proxiesLoading = true;
+    this.proxiesLoadState = "loading";
+    if (this.scene === "mode" && this.session.mode === "proxies_mode") {
+      this.render();
+    }
     try {
       const payload = await this.fetchJson<ProxiesPayload>(this.apiUrl("/api/modes/proxies_mode"), {
         headers: this.authHeaders()
       });
+      this.proxiesLoadState = "ready";
       this.applyFetchedProxies(payload);
     } catch {
+      this.proxiesLoadState = "error";
       this.applyFetchedProxies(this.buildProxyFallbackPayload());
     } finally {
       this.proxiesLoading = false;
@@ -690,6 +714,32 @@ export class AppController {
         this.render();
       }
     }, 1600);
+  }
+
+  private proxyStatusLine(payload: ProxiesPayload, hasItems: boolean): string {
+    if (payload.lastSuccessfulRefreshAt) {
+      return `последнее успешное обновление: ${this.formatTimestamp(payload.lastSuccessfulRefreshAt)}`;
+    }
+
+    if (this.proxiesLoadState === "loading") {
+      return "подождите несколько секунд, список загружается";
+    }
+
+    if (!hasItems) {
+      return "пока нет доступных карточек прокси";
+    }
+
+    return "показана последняя доступная версия";
+  }
+
+  private renderProxiesEmptyState(): HTMLElement {
+    const empty = document.createElement("section");
+    empty.className = "proxies-empty";
+    empty.innerHTML = `
+      <p class="proxies-empty-title">${this.proxiesLoadState === "loading" ? "Получаем список прокси" : "Пока нечего показать"}</p>
+      <p class="proxies-empty-copy">${this.proxiesLoadState === "loading" ? "Если список уже обновлен на сервере, он появится здесь автоматически без перезагрузки." : "Проверьте, что у режима прокси есть активный пароль и что последнее обновление прошло успешно."}</p>
+    `;
+    return empty;
   }
 
   private proxyPayloadChanged(left: ProxiesPayload, right: ProxiesPayload): boolean {
@@ -746,11 +796,8 @@ export class AppController {
     }
   }
 
-  private async renderAdminScene(): Promise<void> {
-    const payload = await this.fetchJson<AdminPayload>(this.apiUrl("/api/admin/bootstrap"), {
-      headers: this.authHeaders()
-    });
-
+  private renderAdminScene(): HTMLElement {
+    const payload = this.adminPayload;
     const shell = document.createElement("main");
     shell.className = "admin-shell";
     shell.innerHTML = `
@@ -760,6 +807,12 @@ export class AppController {
         <p class="admin-intro-copy">Здесь можно без правки кода управлять доступами, режимами сайта, donate-блоком и быстрыми действиями. Экран собран по задачам: сначала что происходит сейчас, потом что чаще всего нужно сделать, и ниже подробное управление.</p>
       </section>
     `;
+
+    if (!payload) {
+      shell.append(this.renderAdminLoadingState());
+      return shell;
+    }
+
     shell.append(
       this.sectionCard("Кратко по состоянию", "Самое важное прямо сейчас: сайт жив, bootstrap работает, donate включен или нет, и какие режимы доступны.", this.renderAdminOverview(payload)),
       this.sectionCard("Быстрые действия", "Что обычно нужно сделать в первую очередь: обновить прокси, сразу заблокировать доступ, создать пароль для режима или поменять глобальные переключатели.", this.renderAdminGuide(payload)),
@@ -769,7 +822,48 @@ export class AppController {
       this.sectionCard("Резервные копии", "Экспорт и импорт служебных данных. Используйте перед крупными изменениями.", this.renderExports()),
       this.sectionCard("Последние события", "Журнал входов и административных действий, чтобы понимать, что происходило недавно.", this.renderAudit(payload.audit))
     );
-    this.root.append(shell);
+    return shell;
+  }
+
+  private renderAdminLoadingState(): HTMLElement {
+    const card = document.createElement("section");
+    card.className = "admin-card admin-loading-card";
+    card.innerHTML = `
+      <div class="admin-card-header">
+        <h2>${this.adminError ? "Не удалось загрузить данные админки" : "Загружаем данные админки"}</h2>
+        <p>${this.adminError ? "Попробуйте подождать секунду или снова открыть hidden admin. Архитектура и доступы уже живы, сейчас загружается только интерфейс управления." : "Подтягиваем режимы, правила доступа, кошельки и журнал событий."}</p>
+      </div>
+    `;
+    return card;
+  }
+
+  private async ensureAdminPayload(force = false): Promise<void> {
+    if (this.adminLoading && !force) {
+      return;
+    }
+
+    if (this.adminPayload && !force) {
+      return;
+    }
+
+    this.adminLoading = true;
+    this.adminError = null;
+    if (this.scene === "mode" && this.session.mode === "admin_mode") {
+      this.render();
+    }
+
+    try {
+      this.adminPayload = await this.fetchJson<AdminPayload>(this.apiUrl("/api/admin/bootstrap"), {
+        headers: this.authHeaders()
+      });
+    } catch {
+      this.adminError = "load_failed";
+    } finally {
+      this.adminLoading = false;
+      if (this.scene === "mode" && this.session.mode === "admin_mode") {
+        this.render();
+      }
+    }
   }
 
   private sectionCard(title: string, description: string, content: HTMLElement): HTMLElement {
@@ -918,7 +1012,7 @@ export class AppController {
           password: String(form.get("password") ?? ""),
           notes: String(form.get("notes") ?? "")
         })
-      }).then(() => this.render());
+      }).then(() => this.ensureAdminPayload(true));
     });
     wrap.append(quickProxy);
 
@@ -977,7 +1071,7 @@ export class AppController {
             isEnabled: form.get("isEnabled") === "on",
             isDefaultPublic: form.get("isDefaultPublic") === "on"
           })
-        }).then(() => this.render());
+        }).then(() => this.ensureAdminPayload(true));
       });
       list.append(row);
     }
@@ -1007,7 +1101,7 @@ export class AppController {
           "donate.visible": data.get("donate.visible") === "on",
           panic_mode: data.get("panic_mode") === "on"
         })
-      }).then(() => this.render());
+      }).then(() => this.ensureAdminPayload(true));
     });
     return form;
   }
@@ -1038,10 +1132,15 @@ export class AppController {
       </label>
       <label>Приоритет <input name="priority" type="number" value="100" /></label>
       <label>Новый пароль <input name="password" required /></label>
-      <label>Комментарий для вас <input name="notes" placeholder="необязательно" /></label>
-      <label>Когда перестанет работать <input name="expiresAt" type="datetime-local" /></label>
-      <label>Сколько раз можно использовать <input name="maxUses" type="number" min="1" /></label>
-      <label>Разрешить только один успешный вход <input name="firstUseOnly" type="checkbox" /></label>
+      <details class="admin-advanced">
+        <summary>Дополнительные настройки</summary>
+        <div class="admin-advanced-grid">
+          <label>Комментарий для вас <input name="notes" placeholder="необязательно" /></label>
+          <label>Когда перестанет работать <input name="expiresAt" type="datetime-local" /></label>
+          <label>Сколько раз можно использовать <input name="maxUses" type="number" min="1" /></label>
+          <label>Разрешить только один успешный вход <input name="firstUseOnly" type="checkbox" /></label>
+        </div>
+      </details>
       <button type="submit">Создать правило</button>
     `;
     add.addEventListener("submit", (event) => {
@@ -1060,7 +1159,7 @@ export class AppController {
           maxUses: form.get("maxUses"),
           firstUseOnly: form.get("firstUseOnly") === "on"
         })
-      }).then(() => this.render());
+      }).then(() => this.ensureAdminPayload(true));
     });
     wrap.append(add);
 
@@ -1119,24 +1218,29 @@ export class AppController {
         <label>Задать новый пароль
           <input name="password" type="text" placeholder="оставьте пустым, если не меняете" />
         </label>
-        <label>Комментарий
-          <input name="notes" value="${this.escapeHtml(rule.notes ?? "")}" placeholder="для ваших заметок" />
-        </label>
-        <label>Когда перестанет работать
-          <input name="expiresAt" type="datetime-local" value="${this.toDatetimeLocalValue(rule.expiresAt)}" />
-        </label>
-        <label>Максимум использований
-          <input name="maxUses" type="number" min="1" value="${rule.maxUses ?? ""}" />
-        </label>
-        <label>Только один успешный вход
-          <input name="firstUseOnly" type="checkbox" ${rule.firstUseOnly ? "checked" : ""} />
-        </label>
-        <div class="admin-stats">
-          <p class="admin-rule-meta">Всего попыток: ${rule.usageCount}</p>
-          <p class="admin-rule-meta">Успешных входов: ${rule.successCount}</p>
-          <p class="admin-rule-meta">Ошибок: ${rule.failCount}</p>
-          <p class="admin-rule-meta">Последнее использование: ${rule.lastUsedAt ? this.formatTimestamp(rule.lastUsedAt) : "никогда"}</p>
-        </div>
+        <details class="admin-advanced">
+          <summary>Дополнительно</summary>
+          <div class="admin-advanced-grid">
+            <label>Комментарий
+              <input name="notes" value="${this.escapeHtml(rule.notes ?? "")}" placeholder="для ваших заметок" />
+            </label>
+            <label>Когда перестанет работать
+              <input name="expiresAt" type="datetime-local" value="${this.toDatetimeLocalValue(rule.expiresAt)}" />
+            </label>
+            <label>Максимум использований
+              <input name="maxUses" type="number" min="1" value="${rule.maxUses ?? ""}" />
+            </label>
+            <label>Только один успешный вход
+              <input name="firstUseOnly" type="checkbox" ${rule.firstUseOnly ? "checked" : ""} />
+            </label>
+          </div>
+          <div class="admin-stats">
+            <p class="admin-rule-meta">Всего попыток: ${rule.usageCount}</p>
+            <p class="admin-rule-meta">Успешных входов: ${rule.successCount}</p>
+            <p class="admin-rule-meta">Ошибок: ${rule.failCount}</p>
+            <p class="admin-rule-meta">Последнее использование: ${rule.lastUsedAt ? this.formatTimestamp(rule.lastUsedAt) : "никогда"}</p>
+          </div>
+        </details>
         <button type="submit">Сохранить правило</button>
       `;
       row.addEventListener("submit", (event) => {
@@ -1157,7 +1261,7 @@ export class AppController {
             maxUses: String(form.get("maxUses") ?? ""),
             firstUseOnly: form.get("firstUseOnly") === "on"
           })
-        }).then(() => this.render());
+        }).then(() => this.ensureAdminPayload(true));
       });
       list.append(row);
     }
@@ -1196,7 +1300,7 @@ export class AppController {
             warningText: form.get("warningText"),
             isEnabled: form.get("isEnabled") === "on"
           })
-        }).then(() => this.render());
+        }).then(() => this.ensureAdminPayload(true));
       });
       wrap.append(row);
     }
@@ -1331,7 +1435,7 @@ export class AppController {
 
   private async adminAction(path: string): Promise<void> {
     await this.fetchJson(this.apiUrl(path), { method: "POST", headers: this.authHeaders() });
-    this.render();
+    await this.ensureAdminPayload(true);
   }
 
   private authHeaders(): HeadersInit {

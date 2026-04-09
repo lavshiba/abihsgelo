@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { parseTelegramProxies } from "../shared/dist/index.js";
 
@@ -15,11 +15,25 @@ if (!response.ok) {
 
 const html = await response.text();
 const parsed = parseTelegramProxies(html);
+let fresh = parsed.slice(0, 9);
+let archive = parsed.slice(9, 129);
+
+if (parsed.length === 0) {
+  try {
+    const existing = JSON.parse(await readFile(resolve("frontend/public/snapshot.json"), "utf8"));
+    fresh = existing.fresh ?? [];
+    archive = existing.archive ?? [];
+  } catch {
+    fresh = [];
+    archive = [];
+  }
+}
+
 const payload = {
   generatedAt: new Date().toISOString(),
   source,
-  fresh: parsed.slice(0, 9),
-  archive: parsed.slice(9, 129)
+  fresh,
+  archive
 };
 
 const target = resolve("frontend/public/snapshot.json");
