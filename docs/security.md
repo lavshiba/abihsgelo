@@ -14,14 +14,14 @@
 
 - normalize password with trim + case fold
 - generate random per-rule salt
-- compute a Worker-safe `scrypt_v2` hash over `normalized_password + pepper`
+- compute a Worker-safe `sha256_v1` hash over `salt + normalized_password + pepper`
 - store `password_hash` and `password_salt`
 - store `hash_scheme` so legacy hashes can be migrated safely
 - `PEPPER` exists only as a Worker secret
 - bootstrap password follows the same hashing path when the Worker seeds the first `admin_mode` rule from `ADMIN_BOOTSTRAP_PASSWORD`
 - the seeded bootstrap rule targets only `admin_mode`
 - no default `proxies_mode` password is created
-- legacy `scrypt_v1` rules remain valid during migration and are rehashed to the current `scrypt_v2` scheme after a successful login
+- legacy `scrypt_v1` rules remain valid during migration and are rehashed to the current `sha256_v1` scheme after a successful login
 
 ## Sessions
 

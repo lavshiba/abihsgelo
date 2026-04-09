@@ -174,7 +174,7 @@ Passwords are never stored raw. Each access rule stores:
 - mode target
 - usage and expiry fields
 
-Current rules use `scrypt_v2` with per-rule salt plus server-side pepper. Older `scrypt_v1` rules remain valid during migration and are upgraded automatically after a successful login.
+Current rules use `sha256_v1` with per-rule salt plus server-side pepper. Older `scrypt_v1` rules remain valid during migration and are upgraded automatically after a successful login.
 
 Passwords are checked only by the Worker. Frontend rendering uses an in-memory session token that disappears on reload.
 

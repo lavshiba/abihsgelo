@@ -4,7 +4,7 @@ import { utf8ToBytes, bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { normalizePassword } from "@abihsgelo/shared";
 
 export const LEGACY_PASSWORD_HASH_SCHEME = "scrypt_v1";
-export const PASSWORD_HASH_SCHEME = "scrypt_v2";
+export const PASSWORD_HASH_SCHEME = "sha256_v1";
 
 export async function hashPassword(password: string, salt: string, pepper: string): Promise<string> {
   return hashPasswordWithScheme(password, salt, pepper, PASSWORD_HASH_SCHEME);
@@ -37,13 +37,7 @@ async function hashPasswordLegacy(password: string, salt: string, pepper: string
 
 async function hashPasswordCurrent(password: string, salt: string, pepper: string): Promise<string> {
   const normalized = normalizePassword(password);
-  const bytes = await scryptAsync(utf8ToBytes(`${normalized}:${pepper}`), hexToBytes(salt), {
-    N: 1 << 12,
-    r: 8,
-    p: 1,
-    dkLen: 32
-  });
-  return bytesToHex(bytes);
+  return bytesToHex(sha256(utf8ToBytes(`${salt}:${normalized}:${pepper}`)));
 }
 
 export function randomHex(bytes = 16): string {

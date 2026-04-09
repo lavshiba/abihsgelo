@@ -34,7 +34,7 @@ Bootstrap safeguard:
 6. If D1 is empty and the bootstrap secret is missing, `/healthz` returns a bootstrap failure and deploy checks must fail.
 
 Password-hash migration:
-- new and rotated rules use lighter `scrypt_v2` parameters so auth stays within Cloudflare Worker resource limits
+- new and rotated rules use `sha256_v1` with per-rule salt plus server-side pepper so auth stays within Cloudflare Worker resource limits
 - older `scrypt_v1` rules still verify successfully
 - after a successful login on a legacy rule, the Worker rehashes it to the current scheme
 
