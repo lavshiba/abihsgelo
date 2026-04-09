@@ -127,7 +127,6 @@ export class AppController {
   }
 
   private render(): void {
-    this.passwordInput = null;
     this.passwordVisual = null;
     this.root.innerHTML = "";
     this.root.className = `scene-root scene-${this.scene}${this.homeDissolving ? " scene-home-dissolving" : ""}`;
@@ -222,6 +221,7 @@ export class AppController {
 
   private enterPasswordScene(): void {
     this.clearPasswordFlow();
+    this.activatePasswordInputBridge();
     this.homeDissolving = true;
     this.render();
     void this.track("home_tap_to_enter");
@@ -290,6 +290,19 @@ export class AppController {
     visual.innerHTML = this.renderPasswordStage();
     this.passwordVisual = visual;
 
+    const input = this.ensurePasswordInput();
+    input.value = this.passwordBuffer;
+
+    stage.append(visual, input);
+    shell.append(stage);
+    return shell;
+  }
+
+  private ensurePasswordInput(): HTMLTextAreaElement {
+    if (this.passwordInput) {
+      return this.passwordInput;
+    }
+
     const input = document.createElement("textarea");
     input.className = "password-hidden-input";
     input.inputMode = "text";
@@ -300,9 +313,7 @@ export class AppController {
     input.spellcheck = false;
     input.rows = 1;
     input.wrap = "off";
-    input.value = this.passwordBuffer;
     input.setAttribute("aria-label", "password");
-    this.passwordInput = input;
 
     input.addEventListener("keydown", (event) => {
       if (event.isComposing || this.passwordCompositionActive) {
@@ -362,9 +373,8 @@ export class AppController {
       }
     });
 
-    stage.append(visual, input);
-    shell.append(stage);
-    return shell;
+    this.passwordInput = input;
+    return input;
   }
 
   private renderPasswordStage(): string {
@@ -496,6 +506,7 @@ export class AppController {
 
   private leavePasswordScene(reason: "fail" | "timeout"): void {
     this.clearPasswordFlow();
+    this.passwordInput?.blur();
     this.passwordVisualState = reason;
     this.syncPasswordSceneVisuals();
 
@@ -504,6 +515,7 @@ export class AppController {
       this.scene = "home";
       this.passwordVisualState = "cursor";
       this.passwordSubmitPending = false;
+      this.passwordInput?.remove();
       this.render();
     }, reason === "fail" ? 180 : 220);
   }
@@ -542,6 +554,7 @@ export class AppController {
         this.passwordBuffer = "";
         this.scene = "mode";
         this.passwordSubmitPending = false;
+        this.passwordInput?.remove();
         if (result.mode === "proxies_mode") {
           this.archiveOpen = false;
           this.pendingScrollTarget = "fresh";
@@ -1753,6 +1766,15 @@ export class AppController {
     input.focus({ preventScroll: true });
     const length = input.value.length;
     input.setSelectionRange(length, length);
+  }
+
+  private activatePasswordInputBridge(): void {
+    const input = this.ensurePasswordInput();
+    input.value = this.passwordBuffer;
+    if (!input.isConnected) {
+      document.body.append(input);
+    }
+    this.focusPasswordInputNow(input);
   }
 
   private syncPasswordBufferFromInput(allowSubmitFromLineBreak: boolean): void {
