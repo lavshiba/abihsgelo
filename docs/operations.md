@@ -14,6 +14,7 @@ Key signals:
 - snapshot age
 - stale warning
 - source fetch failures
+- fresh proxy rows are present after a successful live refresh
 
 ## Outage Playbook
 
@@ -91,6 +92,12 @@ If stale snapshot is visible:
 2. run `npm run snapshot:update`
 3. commit updated snapshot pipeline code if broken
 4. redeploy Pages if required
+
+If live refresh reports success but `proxies_mode` looks empty:
+1. check hidden admin health for `last_live_refresh_at` and `last_refresh_status`
+2. verify `proxy_items_fresh` in D1 is not empty
+3. verify parser changes against current Telegram source markup
+4. never overwrite a previously good proxy dataset with an empty parse result
 
 ## Donate Block Disable
 

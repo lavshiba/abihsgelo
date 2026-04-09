@@ -208,6 +208,13 @@ If the Worker is down:
 - inspect health and audit
 - export JSON payloads for backup
 
+Current admin UX principles:
+- fast first paint after successful password entry, with admin shell visible before payload fetch completes
+- quick proxy password creation as the shortest path after first bootstrap login
+- active, disabled, and archived access rules separated into clearer groups
+- save actions show short success or error feedback instead of silently re-rendering
+- browser admin payload excludes password hash internals
+
 See [docs/admin-guide.md](/home/abihsgelo/Документы/abihsgelo/docs/admin-guide.md).
 
 ## Rollback

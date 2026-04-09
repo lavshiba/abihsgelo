@@ -779,6 +779,26 @@ a {
   line-height: 1.5;
 }
 
+.admin-notice {
+  width: min(92vw, 960px);
+  padding: 14px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  animation: section-arrive 220ms ease both;
+}
+
+.admin-notice-success {
+  border-color: rgba(158, 223, 182, 0.22);
+  background: rgba(158, 223, 182, 0.08);
+}
+
+.admin-notice-error {
+  border-color: rgba(255, 173, 173, 0.22);
+  background: rgba(255, 173, 173, 0.08);
+}
+
 .admin-card {
   width: min(92vw, 960px);
   display: grid;
@@ -1046,10 +1066,28 @@ a {
   padding: 14px;
 }
 
+.admin-rule-shell {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-rule-shell-collapsed > summary {
+  list-style: none;
+}
+
+.admin-rule-shell-collapsed > summary::-webkit-details-marker {
+  display: none;
+}
+
 .admin-subsection-header {
   display: grid;
   gap: 6px;
   padding: 2px 2px 0;
+}
+
+.admin-rule-shell-collapsed > .admin-subsection-header {
+  cursor: pointer;
+  padding: 2px;
 }
 
 @media (max-width: 760px) {
@@ -1062,6 +1100,10 @@ a {
     width: min(94vw, 960px);
     gap: 8px;
     padding: 2px 2px 0;
+  }
+
+  .admin-notice {
+    width: min(94vw, 960px);
   }
 
   .admin-card {

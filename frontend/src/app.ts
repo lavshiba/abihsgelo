@@ -23,6 +23,11 @@ interface SessionState {
   mode: string | null;
 }
 
+interface AdminNotice {
+  tone: "success" | "error";
+  text: string;
+}
+
 const FALLBACK_BOOTSTRAP: BootstrapPayload = {
   siteName: "abihsgelo",
   defaultPublicMode: "home_mode",
@@ -71,6 +76,8 @@ export class AppController {
   private adminPayload: AdminPayload | null = null;
   private adminLoading = false;
   private adminError: string | null = null;
+  private adminNotice: AdminNotice | null = null;
+  private adminNoticeHandle: number | null = null;
 
   public constructor(root: HTMLDivElement) {
     this.root = root;
@@ -808,6 +815,13 @@ export class AppController {
       </section>
     `;
 
+    if (this.adminNotice) {
+      const notice = document.createElement("section");
+      notice.className = `admin-notice admin-notice-${this.adminNotice.tone}`;
+      notice.textContent = this.adminNotice.text;
+      shell.append(notice);
+    }
+
     if (!payload) {
       shell.append(this.renderAdminLoadingState());
       return shell;
@@ -891,12 +905,12 @@ export class AppController {
 
     const refresh = document.createElement("button");
     refresh.textContent = "Обновить прокси сейчас";
-    refresh.addEventListener("click", () => void this.adminAction("/api/admin/refresh-now"));
+    refresh.addEventListener("click", () => void this.adminAction("/api/admin/refresh-now", "Прокси обновлены."));
 
     const lock = document.createElement("button");
     lock.textContent = "Мгновенно заблокировать";
     lock.className = "danger";
-    lock.addEventListener("click", () => void this.adminAction("/api/admin/lock-now"));
+    lock.addEventListener("click", () => void this.adminAction("/api/admin/lock-now", "Активные защищенные сессии сброшены."));
 
     actions.append(refresh, lock);
     wrap.append(actions);
@@ -1002,17 +1016,24 @@ export class AppController {
     quickProxy.addEventListener("submit", (event) => {
       event.preventDefault();
       const form = new FormData(quickProxy);
-      void this.fetchJson(this.apiUrl("/api/admin/access-rules"), {
-        method: "POST",
-        headers: { ...this.authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          label: String(form.get("label") ?? "доступ в прокси"),
-          targetMode: "proxies_mode",
-          priority: 100,
-          password: String(form.get("password") ?? ""),
-          notes: String(form.get("notes") ?? "")
-        })
-      }).then(() => this.ensureAdminPayload(true));
+      void this.runAdminTask(
+        () => this.fetchJson(this.apiUrl("/api/admin/access-rules"), {
+          method: "POST",
+          headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            label: String(form.get("label") ?? "доступ в прокси"),
+            targetMode: "proxies_mode",
+            priority: 100,
+            password: String(form.get("password") ?? ""),
+            notes: String(form.get("notes") ?? "")
+          })
+        }),
+        "Пароль для прокси создан."
+      ).then((result) => {
+        if (result !== undefined) {
+          quickProxy.reset();
+        }
+      });
     });
     wrap.append(quickProxy);
 
@@ -1021,12 +1042,12 @@ export class AppController {
 
     const refresh = document.createElement("button");
     refresh.textContent = "Обновить прокси сейчас";
-    refresh.addEventListener("click", () => void this.adminAction("/api/admin/refresh-now"));
+    refresh.addEventListener("click", () => void this.adminAction("/api/admin/refresh-now", "Прокси обновлены."));
 
     const lock = document.createElement("button");
     lock.textContent = "Мгновенно заблокировать";
     lock.className = "danger";
-    lock.addEventListener("click", () => void this.adminAction("/api/admin/lock-now"));
+    lock.addEventListener("click", () => void this.adminAction("/api/admin/lock-now", "Активные защищенные сессии сброшены."));
 
     actions.append(refresh, lock);
     wrap.append(actions);
@@ -1063,15 +1084,18 @@ export class AppController {
       row.addEventListener("submit", (event) => {
         event.preventDefault();
         const form = new FormData(row);
-        void this.fetchJson(this.apiUrl(`/api/admin/modes/${mode.id}`), {
-          method: "PUT",
-          headers: { ...this.authHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({
-            accessState: form.get("accessState"),
-            isEnabled: form.get("isEnabled") === "on",
-            isDefaultPublic: form.get("isDefaultPublic") === "on"
-          })
-        }).then(() => this.ensureAdminPayload(true));
+        void this.runAdminTask(
+          () => this.fetchJson(this.apiUrl(`/api/admin/modes/${mode.id}`), {
+            method: "PUT",
+            headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({
+              accessState: form.get("accessState"),
+              isEnabled: form.get("isEnabled") === "on",
+              isDefaultPublic: form.get("isDefaultPublic") === "on"
+            })
+          }),
+          `Режим «${this.modeLabel(mode.id)}» сохранен.`
+        );
       });
       list.append(row);
     }
@@ -1094,14 +1118,17 @@ export class AppController {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const data = new FormData(form);
-      void this.fetchJson(this.apiUrl("/api/admin/settings"), {
-        method: "PUT",
-        headers: { ...this.authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          "donate.visible": data.get("donate.visible") === "on",
-          panic_mode: data.get("panic_mode") === "on"
-        })
-      }).then(() => this.ensureAdminPayload(true));
+      void this.runAdminTask(
+        () => this.fetchJson(this.apiUrl("/api/admin/settings"), {
+          method: "PUT",
+          headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            "donate.visible": data.get("donate.visible") === "on",
+            panic_mode: data.get("panic_mode") === "on"
+          })
+        }),
+        "Глобальные настройки сохранены."
+      );
     });
     return form;
   }
@@ -1146,44 +1173,68 @@ export class AppController {
     add.addEventListener("submit", (event) => {
       event.preventDefault();
       const form = new FormData(add);
-      void this.fetchJson(this.apiUrl("/api/admin/access-rules"), {
-        method: "POST",
-        headers: { ...this.authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          label: form.get("label"),
-          targetMode: form.get("targetMode"),
-          priority: Number(form.get("priority") ?? 100),
-          password: form.get("password"),
-          notes: form.get("notes"),
-          expiresAt: form.get("expiresAt"),
-          maxUses: form.get("maxUses"),
-          firstUseOnly: form.get("firstUseOnly") === "on"
-        })
-      }).then(() => this.ensureAdminPayload(true));
+      void this.runAdminTask(
+        () => this.fetchJson(this.apiUrl("/api/admin/access-rules"), {
+          method: "POST",
+          headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            label: form.get("label"),
+            targetMode: form.get("targetMode"),
+            priority: Number(form.get("priority") ?? 100),
+            password: form.get("password"),
+            notes: form.get("notes"),
+            expiresAt: form.get("expiresAt"),
+            maxUses: form.get("maxUses"),
+            firstUseOnly: form.get("firstUseOnly") === "on"
+          })
+        }),
+        "Новое правило доступа создано."
+      ).then((result) => {
+        if (result !== undefined) {
+          add.reset();
+        }
+      });
     });
     wrap.append(add);
 
-    const activeRules = rules.filter((rule) => !rule.softDeletedAt);
+    const activeRules = rules.filter((rule) => !rule.softDeletedAt && rule.isEnabled);
+    const disabledRules = rules.filter((rule) => !rule.softDeletedAt && !rule.isEnabled);
     const archivedRules = rules.filter((rule) => Boolean(rule.softDeletedAt));
 
-    wrap.append(this.renderRuleGroup("Активные правила", "Ими можно пользоваться сейчас. Здесь удобно менять режим, пароль и ограничения.", activeRules, modes));
+    wrap.append(this.renderRuleGroup("Рабочие правила", "Ими можно пользоваться прямо сейчас. Здесь оставлены только основные действия: поменять режим, пароль или статус.", activeRules, modes));
+
+    if (disabledRules.length > 0) {
+      wrap.append(this.renderRuleGroup("Выключенные правила", "Они сохранены, но сейчас не работают. Это удобно для временно отключенных паролей.", disabledRules, modes, true));
+    }
 
     if (archivedRules.length > 0) {
-      wrap.append(this.renderRuleGroup("Архив", "Старые или временно отключенные правила. Их можно вернуть или оставить как историю.", archivedRules, modes));
+      wrap.append(this.renderRuleGroup("Архив", "Старые или временно отключенные правила. Их можно вернуть или оставить как историю.", archivedRules, modes, true));
     }
 
     return wrap;
   }
 
-  private renderRuleGroup(title: string, description: string, rules: AccessRuleSummary[], modes: ModeSummary[]): HTMLElement {
+  private renderRuleGroup(title: string, description: string, rules: AccessRuleSummary[], modes: ModeSummary[], collapsed = false): HTMLElement {
     const group = document.createElement("section");
     group.className = "admin-rule-group";
-    group.innerHTML = `
-      <div class="admin-subsection-header">
-        <h3>${title}</h3>
-        <p>${description}</p>
-      </div>
-    `;
+    const body = document.createElement(collapsed ? "details" : "div");
+    body.className = collapsed ? "admin-rule-shell admin-rule-shell-collapsed" : "admin-rule-shell";
+    if (body instanceof HTMLDetailsElement) {
+      body.open = false;
+      body.innerHTML = `
+        <summary class="admin-subsection-header">
+          <h3>${title}</h3>
+          <p>${description}</p>
+        </summary>
+      `;
+    } else {
+      body.innerHTML = `
+        <div class="admin-subsection-header">
+          <h3>${title}</h3>
+          <p>${description}</p>
+        </div>
+      `;
+    }
 
     const list = document.createElement("div");
     list.className = "admin-list";
@@ -1198,16 +1249,14 @@ export class AppController {
         </div>
         <div class="admin-badges">
           <span class="admin-badge">${rule.softDeletedAt ? "в архиве" : rule.isEnabled ? "включено" : "выключено"}</span>
-          <span class="admin-badge">${this.modeLabel(rule.targetMode)}</span>
+          <span class="admin-badge">успешных входов: ${rule.successCount}</span>
+          <span class="admin-badge">${rule.lastUsedAt ? `последний вход ${this.formatTimestamp(rule.lastUsedAt)}` : "еще не использовалось"}</span>
         </div>
-        <label>Название правила
-          <input name="label" value="${this.escapeHtml(rule.label)}" />
-        </label>
-        <label>Какой режим открывает
+        <label>Открывает режим
           <select name="targetMode">${this.modeOptions(modes, rule.targetMode)}</select>
         </label>
-        <label>Приоритет
-          <input name="priority" type="number" value="${rule.priority}" />
+        <label>Новый пароль
+          <input name="password" type="text" placeholder="введите только если хотите сменить пароль" />
         </label>
         <label>Правило включено
           <input name="isEnabled" type="checkbox" ${rule.isEnabled ? "checked" : ""} ${rule.softDeletedAt ? "disabled" : ""} />
@@ -1215,12 +1264,15 @@ export class AppController {
         <label>Убрать в архив
           <input name="softDelete" type="checkbox" ${rule.softDeletedAt ? "checked" : ""} />
         </label>
-        <label>Задать новый пароль
-          <input name="password" type="text" placeholder="оставьте пустым, если не меняете" />
-        </label>
         <details class="admin-advanced">
-          <summary>Дополнительно</summary>
+          <summary>Редкое и служебное</summary>
           <div class="admin-advanced-grid">
+            <label>Название правила
+              <input name="label" value="${this.escapeHtml(rule.label)}" />
+            </label>
+            <label>Приоритет
+              <input name="priority" type="number" value="${rule.priority}" />
+            </label>
             <label>Комментарий
               <input name="notes" value="${this.escapeHtml(rule.notes ?? "")}" placeholder="для ваших заметок" />
             </label>
@@ -1246,27 +1298,31 @@ export class AppController {
       row.addEventListener("submit", (event) => {
         event.preventDefault();
         const form = new FormData(row);
-        void this.fetchJson(this.apiUrl(`/api/admin/access-rules/${rule.id}`), {
-          method: "PUT",
-          headers: { ...this.authHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({
-            label: form.get("label"),
-            targetMode: form.get("targetMode"),
-            priority: Number(form.get("priority")),
-            isEnabled: form.get("softDelete") === "on" ? false : form.get("isEnabled") === "on",
-            softDelete: form.get("softDelete") === "on",
-            password: String(form.get("password") ?? ""),
-            notes: String(form.get("notes") ?? ""),
-            expiresAt: String(form.get("expiresAt") ?? ""),
-            maxUses: String(form.get("maxUses") ?? ""),
-            firstUseOnly: form.get("firstUseOnly") === "on"
-          })
-        }).then(() => this.ensureAdminPayload(true));
+        void this.runAdminTask(
+          () => this.fetchJson(this.apiUrl(`/api/admin/access-rules/${rule.id}`), {
+            method: "PUT",
+            headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({
+              label: form.get("label"),
+              targetMode: form.get("targetMode"),
+              priority: Number(form.get("priority")),
+              isEnabled: form.get("softDelete") === "on" ? false : form.get("isEnabled") === "on",
+              softDelete: form.get("softDelete") === "on",
+              password: String(form.get("password") ?? ""),
+              notes: String(form.get("notes") ?? ""),
+              expiresAt: String(form.get("expiresAt") ?? ""),
+              maxUses: String(form.get("maxUses") ?? ""),
+              firstUseOnly: form.get("firstUseOnly") === "on"
+            })
+          }),
+          `Правило «${rule.label}» сохранено.`
+        );
       });
       list.append(row);
     }
 
-    group.append(list);
+    body.append(list);
+    group.append(body);
     return group;
   }
 
@@ -1292,15 +1348,18 @@ export class AppController {
       row.addEventListener("submit", (event) => {
         event.preventDefault();
         const form = new FormData(row);
-        void this.fetchJson(this.apiUrl(`/api/admin/wallets/${wallet.id}`), {
-          method: "PUT",
-          headers: { ...this.authHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({
-            address: form.get("address"),
-            warningText: form.get("warningText"),
-            isEnabled: form.get("isEnabled") === "on"
-          })
-        }).then(() => this.ensureAdminPayload(true));
+        void this.runAdminTask(
+          () => this.fetchJson(this.apiUrl(`/api/admin/wallets/${wallet.id}`), {
+            method: "PUT",
+            headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({
+              address: form.get("address"),
+              warningText: form.get("warningText"),
+              isEnabled: form.get("isEnabled") === "on"
+            })
+          }),
+          `Кошелек ${wallet.network.toUpperCase()} сохранен.`
+        );
       });
       wrap.append(row);
     }
@@ -1351,12 +1410,14 @@ export class AppController {
         return;
       }
       const text = await file.text();
-      await this.fetchJson(this.apiUrl(`/api/admin/import?kind=${select.value}`), {
-        method: "POST",
-        headers: { ...this.authHeaders(), "Content-Type": "application/json" },
-        body: text
-      });
-      this.render();
+      await this.runAdminTask(
+        () => this.fetchJson(this.apiUrl(`/api/admin/import?kind=${select.value}`), {
+          method: "POST",
+          headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+          body: text
+        }),
+        "Импорт завершен."
+      );
     });
     wrap.append(select, input, button);
     return wrap;
@@ -1433,9 +1494,44 @@ export class AppController {
     return overlay;
   }
 
-  private async adminAction(path: string): Promise<void> {
-    await this.fetchJson(this.apiUrl(path), { method: "POST", headers: this.authHeaders() });
-    await this.ensureAdminPayload(true);
+  private async adminAction(path: string, successMessage: string): Promise<void> {
+    await this.runAdminTask(
+      () => this.fetchJson(this.apiUrl(path), { method: "POST", headers: this.authHeaders() }),
+      successMessage
+    );
+  }
+
+  private async runAdminTask<T>(task: () => Promise<T>, successMessage: string): Promise<T | undefined> {
+    try {
+      const result = await task();
+      this.setAdminNotice("success", successMessage);
+      await this.ensureAdminPayload(true);
+      return result;
+    } catch {
+      this.setAdminNotice("error", "Не удалось применить изменение. Попробуйте еще раз.");
+      if (this.scene === "mode" && this.session.mode === "admin_mode") {
+        this.render();
+      }
+      return undefined;
+    }
+  }
+
+  private setAdminNotice(tone: AdminNotice["tone"], text: string): void {
+    this.adminNotice = { tone, text };
+    if (this.adminNoticeHandle !== null) {
+      window.clearTimeout(this.adminNoticeHandle);
+    }
+    this.adminNoticeHandle = window.setTimeout(() => {
+      this.adminNotice = null;
+      this.adminNoticeHandle = null;
+      if (this.scene === "mode" && this.session.mode === "admin_mode") {
+        this.render();
+      }
+    }, 3200);
+
+    if (this.scene === "mode" && this.session.mode === "admin_mode") {
+      this.render();
+    }
   }
 
   private authHeaders(): HeadersInit {

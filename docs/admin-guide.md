@@ -20,6 +20,13 @@ This bootstrap path is required to prevent the deadlock where `admin_mode` is lo
 - readable grouped controls
 - no default browser-form look
 - same graphite visual world as the rest of the site
+- short success or error feedback after save actions
+- access rules grouped into:
+  - quick proxy password creation
+  - working rules
+  - disabled rules
+  - archive
+- advanced rule fields stay hidden behind an explicit expanded section by default
 
 ## What It Can Do
 
@@ -75,6 +82,11 @@ Editable from hidden admin:
 - `first_use_only`
 - `is_enabled`
 - archive state
+
+The browser-side admin payload must never include:
+- `password_hash`
+- `password_salt`
+- `hash_scheme`
 
 The automatically seeded bootstrap rule:
 - targets `admin_mode`

@@ -22,6 +22,7 @@
 - the seeded bootstrap rule targets only `admin_mode`
 - no default `proxies_mode` password is created
 - legacy `scrypt_v1` rules remain valid during migration and are rehashed to the current `sha256_v1` scheme after a successful login
+- hidden admin API responses may return rule metadata for editing, but must never expose `password_hash`, `password_salt`, or `hash_scheme` to the browser
 
 ## Sessions
 

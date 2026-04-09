@@ -1,6 +1,6 @@
 import type { AdminPayload } from "@abihsgelo/shared";
 import type { Env } from "./db";
-import { addAudit, getBootstrap, getBootstrapStatus, getModeState, getProxyPayload, listAccessRules, listModes, listWallets, setSetting } from "./db";
+import { addAudit, getBootstrap, getBootstrapStatus, getModeState, getProxyPayload, listAccessRules, listModes, listWallets, setSetting, toAccessRuleSummary } from "./db";
 import { refreshProxyState } from "./proxy";
 import { LEGACY_PASSWORD_HASH_SCHEME, PASSWORD_HASH_SCHEME, TRANSITION_PASSWORD_HASH_SCHEME, hashPassword, hashToken, randomHex, verifyPassword } from "./security";
 
@@ -86,7 +86,7 @@ export default {
           mode: "admin_mode",
           modes: await listModes(env),
           wallets: await listWallets(env),
-          accessRules: await listAccessRules(env, true),
+          accessRules: (await listAccessRules(env, true)).map(toAccessRuleSummary),
           settings: {
             "donate.visible": await getBootstrap(env).then((value) => value.donateVisible),
             panic_mode: await env.DB.prepare(`SELECT value_json FROM site_settings WHERE key = 'panic_mode'`).first<{ value_json: string }>().then((row) => row ? JSON.parse(row.value_json) : false)

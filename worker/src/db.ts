@@ -87,6 +87,27 @@ export async function listAccessRules(env: Env, includeSoftDeleted = false): Pro
   }));
 }
 
+export function toAccessRuleSummary(rule: AuthRuleRecord): AccessRuleSummary {
+  return {
+    id: rule.id,
+    label: rule.label,
+    targetMode: rule.targetMode,
+    isEnabled: rule.isEnabled,
+    priority: rule.priority,
+    notes: rule.notes,
+    usageCount: rule.usageCount,
+    successCount: rule.successCount,
+    failCount: rule.failCount,
+    lastUsedAt: rule.lastUsedAt,
+    createdAt: rule.createdAt,
+    updatedAt: rule.updatedAt,
+    expiresAt: rule.expiresAt,
+    maxUses: rule.maxUses,
+    firstUseOnly: rule.firstUseOnly,
+    softDeletedAt: rule.softDeletedAt
+  };
+}
+
 export async function getModeState(env: Env, modeId: string): Promise<ModeSummary | null> {
   const mode = await env.DB.prepare(
     `SELECT id, label, access_state AS accessState, is_enabled AS isEnabled, is_default_public AS isDefaultPublic
