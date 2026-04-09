@@ -62,7 +62,7 @@ Current automated coverage includes:
 - newline fallback normalization inside the hidden control
 
 Worker auth hash notes:
-- current rules are created with native `PBKDF2-SHA-256`
+- current rules are created with `scrypt_v2`
 - old `scrypt_v1` rules still work during migration
 - successful login on a legacy rule upgrades it automatically to the current scheme
 

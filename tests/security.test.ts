@@ -6,7 +6,7 @@ describe("worker password hashing", () => {
   const salt = "00112233445566778899aabbccddeeff";
   const password = "olegadmin";
 
-  it("verifies the native worker-safe PBKDF2 scheme", async () => {
+  it("verifies the current worker-safe scrypt scheme", async () => {
     const hash = await hashPassword(password, salt, pepper);
 
     await expect(verifyPassword(password, salt, pepper, hash, PASSWORD_HASH_SCHEME)).resolves.toBe(true);

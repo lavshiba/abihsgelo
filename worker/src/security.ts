@@ -4,19 +4,18 @@ import { utf8ToBytes, bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { normalizePassword } from "@abihsgelo/shared";
 
 export const LEGACY_PASSWORD_HASH_SCHEME = "scrypt_v1";
-export const PASSWORD_HASH_SCHEME = "pbkdf2_sha256_v1";
-const PBKDF2_ITERATIONS = 150_000;
+export const PASSWORD_HASH_SCHEME = "scrypt_v2";
 
 export async function hashPassword(password: string, salt: string, pepper: string): Promise<string> {
   return hashPasswordWithScheme(password, salt, pepper, PASSWORD_HASH_SCHEME);
 }
 
 export async function hashPasswordWithScheme(password: string, salt: string, pepper: string, scheme: string): Promise<string> {
-  if (scheme === LEGACY_PASSWORD_HASH_SCHEME) {
-    return hashPasswordLegacy(password, salt, pepper);
+  if (scheme === PASSWORD_HASH_SCHEME) {
+    return hashPasswordCurrent(password, salt, pepper);
   }
 
-  return hashPasswordPbkdf2(password, salt, pepper);
+  return hashPasswordLegacy(password, salt, pepper);
 }
 
 export async function verifyPassword(password: string, salt: string, pepper: string, expectedHash: string, scheme: string | null | undefined): Promise<boolean> {
@@ -36,22 +35,15 @@ async function hashPasswordLegacy(password: string, salt: string, pepper: string
   return bytesToHex(bytes);
 }
 
-async function hashPasswordPbkdf2(password: string, salt: string, pepper: string): Promise<string> {
+async function hashPasswordCurrent(password: string, salt: string, pepper: string): Promise<string> {
   const normalized = normalizePassword(password);
-  const input = toArrayBuffer(utf8ToBytes(`${normalized}:${pepper}`));
-  const importedKey = await crypto.subtle.importKey("raw", input, "PBKDF2", false, ["deriveBits"]);
-  const derivedBits = await crypto.subtle.deriveBits({
-    name: "PBKDF2",
-    hash: "SHA-256",
-    salt: toArrayBuffer(hexToBytes(salt)),
-    iterations: PBKDF2_ITERATIONS
-  }, importedKey, 256);
-
-  return bytesToHex(new Uint8Array(derivedBits));
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const bytes = await scryptAsync(utf8ToBytes(`${normalized}:${pepper}`), hexToBytes(salt), {
+    N: 1 << 12,
+    r: 8,
+    p: 1,
+    dkLen: 32
+  });
+  return bytesToHex(bytes);
 }
 
 export function randomHex(bytes = 16): string {

@@ -1,4 +1,4 @@
-ALTER TABLE access_rules ADD COLUMN hash_scheme TEXT NOT NULL DEFAULT 'pbkdf2_sha256_v1';
+ALTER TABLE access_rules ADD COLUMN hash_scheme TEXT NOT NULL DEFAULT 'scrypt_v2';
 
 UPDATE access_rules
 SET hash_scheme = 'scrypt_v1'
