@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LEGACY_PASSWORD_HASH_SCHEME, PASSWORD_HASH_SCHEME, hashPassword, hashPasswordWithScheme, verifyPassword } from "../worker/src/security";
+import { LEGACY_PASSWORD_HASH_SCHEME, PASSWORD_HASH_SCHEME, TRANSITION_PASSWORD_HASH_SCHEME, hashPassword, hashPasswordWithScheme, verifyPassword } from "../worker/src/security";
 
 describe("worker password hashing", () => {
   const pepper = "pepper";
@@ -18,5 +18,11 @@ describe("worker password hashing", () => {
 
     await expect(verifyPassword(password, salt, pepper, hash, LEGACY_PASSWORD_HASH_SCHEME)).resolves.toBe(true);
     await expect(verifyPassword(password, salt, pepper, hash, null)).resolves.toBe(true);
+  });
+
+  it("accepts the intermediate scrypt_v2 transition scheme", async () => {
+    const hash = await hashPasswordWithScheme(password, salt, pepper, TRANSITION_PASSWORD_HASH_SCHEME);
+
+    await expect(verifyPassword(password, salt, pepper, hash, TRANSITION_PASSWORD_HASH_SCHEME)).resolves.toBe(true);
   });
 });

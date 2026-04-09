@@ -2,7 +2,7 @@ import type { AdminPayload } from "@abihsgelo/shared";
 import type { Env } from "./db";
 import { addAudit, getBootstrap, getBootstrapStatus, getModeState, getProxyPayload, listAccessRules, listModes, listWallets, setSetting } from "./db";
 import { refreshProxyState } from "./proxy";
-import { LEGACY_PASSWORD_HASH_SCHEME, PASSWORD_HASH_SCHEME, hashPassword, hashToken, randomHex, verifyPassword } from "./security";
+import { LEGACY_PASSWORD_HASH_SCHEME, PASSWORD_HASH_SCHEME, TRANSITION_PASSWORD_HASH_SCHEME, hashPassword, hashToken, randomHex, verifyPassword } from "./security";
 
 type JsonBody = Record<string, unknown>;
 
@@ -223,7 +223,7 @@ async function authenticate(env: Env, password: string, ctx: ExecutionContext): 
       continue;
     }
 
-    const requiresRehash = !rule.hashScheme || rule.hashScheme === LEGACY_PASSWORD_HASH_SCHEME;
+    const requiresRehash = !rule.hashScheme || rule.hashScheme === LEGACY_PASSWORD_HASH_SCHEME || rule.hashScheme === TRANSITION_PASSWORD_HASH_SCHEME;
     const nextSalt = requiresRehash ? randomHex(16) : null;
     const nextHash = requiresRehash && nextSalt ? await hashPassword(password, nextSalt, env.PEPPER) : null;
 
