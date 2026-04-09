@@ -22,6 +22,7 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test
+      - run: npm run build:shared
       - run: npm run build:frontend
       - name: Deploy Pages
         run: npx wrangler@4.81.0 pages deploy frontend/dist --project-name abihsgelo --branch main --commit-dirty=true
