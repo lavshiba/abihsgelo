@@ -53,6 +53,8 @@ Only push or deploy after all five pass.
 - Keep Pages and Worker operationally separate. Static shell must still load when Worker is unavailable.
 - Frontend auth state lives in memory only. No cookies, `localStorage`, or `sessionStorage` for session tokens.
 - Hidden password entry is a typographic monolith only. No visible input box, labels, submit buttons, or back buttons.
+- Protected panels should provide an in-app close path back to `home_mode` without full page reload.
+- Telegram CTA behavior should prefer direct app deep-link handoff before web fallback.
 - All mode/public-lock behavior must be data-driven through D1, not hardcoded special cases.
 - Hidden admin changes passwords, mode visibility, wallets, donate block, and refresh/lock operations without code edits.
 - Snapshot fallback must never reveal protected content or admin logic.

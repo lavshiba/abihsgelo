@@ -79,6 +79,8 @@ export class AppController {
   private adminError: string | null = null;
   private adminNotice: AdminNotice | null = null;
   private adminNoticeHandle: number | null = null;
+  private panelClosing = false;
+  private panelCloseHandle: number | null = null;
 
   public constructor(root: HTMLDivElement) {
     this.root = root;
@@ -217,6 +219,43 @@ export class AppController {
     }
 
     return shell;
+  }
+
+  private renderPanelCloseButton(label: string): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "panel-close";
+    button.setAttribute("aria-label", label);
+    button.innerHTML = `
+      <span class="panel-close-line"></span>
+      <span class="panel-close-line"></span>
+    `;
+    button.addEventListener("click", () => {
+      this.closeCurrentPanel();
+    });
+    return button;
+  }
+
+  private closeCurrentPanel(): void {
+    if (this.scene !== "mode" || this.panelClosing) {
+      return;
+    }
+
+    if (this.panelCloseHandle !== null) {
+      window.clearTimeout(this.panelCloseHandle);
+    }
+
+    this.panelClosing = true;
+    this.render();
+    this.panelCloseHandle = window.setTimeout(() => {
+      this.panelClosing = false;
+      this.panelCloseHandle = null;
+      this.archiveOpen = false;
+      this.walletOverlay = null;
+      this.session = { token: null, mode: null };
+      this.scene = "home";
+      this.render();
+    }, 170);
   }
 
   private enterPasswordScene(): void {
@@ -553,6 +592,7 @@ export class AppController {
         this.session = { mode: result.mode ?? null, token: result.token ?? null };
         this.passwordBuffer = "";
         this.scene = "mode";
+        this.panelClosing = false;
         this.passwordSubmitPending = false;
         this.passwordInput?.remove();
         if (result.mode === "proxies_mode") {
@@ -573,7 +613,7 @@ export class AppController {
         if (result.mode === "admin_mode") {
           void this.ensureAdminPayload(true);
         }
-      }, 120);
+      }, 80);
     } catch {
       window.clearTimeout(requestTimeout);
       this.passwordSubmitPending = false;
@@ -585,25 +625,41 @@ export class AppController {
     const payload = this.currentProxiesPayload ?? this.buildProxyFallbackPayload();
     const hasItems = payload.fresh.length > 0;
     const shell = document.createElement("main");
-    shell.className = `proxies-shell${this.archiveOpen ? " archive-visible" : ""}`;
-    shell.innerHTML = `
-      <section class="proxies-stack">
+    shell.className = `proxies-shell${this.archiveOpen ? " archive-visible" : ""}${this.panelClosing ? " is-closing" : ""}`;
+
+    const frame = document.createElement("section");
+    frame.className = "panel-frame panel-frame-proxies";
+
+    const chrome = document.createElement("div");
+    chrome.className = "panel-chrome";
+    chrome.innerHTML = `
+      <div class="panel-kicker-wrap">
+        <p class="panel-kicker">proxies_mode</p>
         <h1>${this.proxiesLoadState === "loading" && !hasItems ? "загружаем свежие прокси..." : payload.title}</h1>
-        <p class="status-line">${this.proxyStatusLine(payload, hasItems)}</p>
-        ${payload.isStale ? `<p class="stale-line">${payload.staleReason ?? "временно показана последняя сохраненная версия"}</p>` : ""}
-      </section>
+      </div>
+    `;
+    chrome.append(this.renderPanelCloseButton("Вернуться на главную"));
+
+    const status = document.createElement("section");
+    status.className = "proxies-status-card";
+    status.innerHTML = `
+      <p class="status-line">${this.proxyStatusLine(payload, hasItems)}</p>
+      ${payload.isStale ? `<p class="stale-line">${payload.staleReason ?? "временно показана последняя сохраненная версия"}</p>` : ""}
     `;
 
+    frame.append(chrome, status);
+
     if (hasItems) {
-      shell.append(this.renderFreshGrid(payload.fresh));
+      frame.append(this.renderFreshGrid(payload.fresh));
     } else {
-      shell.append(this.renderProxiesEmptyState());
+      frame.append(this.renderProxiesEmptyState());
     }
 
     if (payload.archive.length > 0) {
-      shell.append(this.renderArchive(payload.archive));
+      frame.append(this.renderArchive(payload.archive));
     }
 
+    shell.append(frame);
     return shell;
   }
 
@@ -927,14 +983,19 @@ export class AppController {
   private renderAdminScene(): HTMLElement {
     const payload = this.adminPayload;
     const shell = document.createElement("main");
-    shell.className = "admin-shell";
-    shell.innerHTML = `
-      <section class="admin-intro">
+    shell.className = `admin-shell${this.panelClosing ? " is-closing" : ""}`;
+
+    const header = document.createElement("section");
+    header.className = "admin-intro admin-topbar";
+    header.innerHTML = `
+      <div class="admin-topbar-copy">
         <p class="admin-kicker">hidden admin</p>
         <h1>Панель управления</h1>
-        <p class="admin-intro-copy">Здесь можно без правки кода управлять доступами, режимами сайта, donate-блоком и быстрыми действиями. Экран собран по задачам: сначала что происходит сейчас, потом что чаще всего нужно сделать, и ниже подробное управление.</p>
-      </section>
+        <p class="admin-intro-copy">Минималистичная скрытая админка для доступов, режимов, кошельков и быстрых действий. Сверху самое частое, ниже точное управление без лишнего шума.</p>
+      </div>
     `;
+    header.append(this.renderPanelCloseButton("Вернуться на главную"));
+    shell.append(header);
 
     if (this.adminNotice) {
       const notice = document.createElement("section");
@@ -948,15 +1009,23 @@ export class AppController {
       return shell;
     }
 
-    shell.append(
-      this.sectionCard("Кратко по состоянию", "Самое важное прямо сейчас: сайт жив, bootstrap работает, donate включен или нет, и какие режимы доступны.", this.renderAdminOverview(payload)),
-      this.sectionCard("Быстрые действия", "Что обычно нужно сделать в первую очередь: обновить прокси, сразу заблокировать доступ, создать пароль для режима или поменять глобальные переключатели.", this.renderAdminGuide(payload)),
-      this.sectionCard("Правила доступа", "Здесь создаются и редактируются пароли. Каждый пароль открывает конкретный режим сайта.", this.renderAccessRules(payload.accessRules, payload.modes)),
-      this.sectionCard("Режимы сайта", "Здесь решается, какой режим публичный, какой закрытый, и какие режимы вообще включены.", this.renderModes(payload.modes)),
-      this.sectionCard("Donate и кошельки", "Управление видимостью donate-блока и адресами кошельков для сетей.", this.renderWallets(payload.wallets, payload.settings)),
-      this.sectionCard("Резервные копии", "Экспорт и импорт служебных данных. Используйте перед крупными изменениями.", this.renderExports()),
-      this.sectionCard("Последние события", "Журнал входов и административных действий, чтобы понимать, что происходило недавно.", this.renderAudit(payload.audit))
+    const leadGrid = document.createElement("section");
+    leadGrid.className = "admin-lead-grid";
+    leadGrid.append(
+      this.sectionCard("Сейчас на сайте", "Короткая сводка по текущему состоянию, чтобы сразу понимать, жив ли сайт и что открыто.", this.renderAdminOverview(payload)),
+      this.sectionCard("Быстрые действия", "Самые частые сценарии: открыть доступ в прокси, обновить прокси сейчас, быстро закрыть доступ или изменить глобальные переключатели.", this.renderAdminGuide(payload))
     );
+
+    const controlGrid = document.createElement("section");
+    controlGrid.className = "admin-control-grid";
+    controlGrid.append(
+      this.sectionCard("Правила доступа", "Здесь вы создаете пароль, меняете его, выключаете или отправляете в архив. Один пароль всегда открывает один конкретный режим.", this.renderAccessRules(payload.accessRules, payload.modes)),
+      this.sectionCard("Режимы сайта", "Здесь определяется, какой режим публичный, какой закрытый и какие режимы вообще включены.", this.renderModes(payload.modes)),
+      this.sectionCard("Donate и кошельки", "Показывать или скрывать donate, менять адреса и включать нужные wallet entries.", this.renderWallets(payload.wallets, payload.settings)),
+      this.sectionCard("Служебное", "Экспорт, импорт и последние административные события. Используйте это для резервирования и быстрой проверки действий.", this.renderAdminUtility(payload))
+    );
+
+    shell.append(leadGrid, controlGrid);
     return shell;
   }
 
@@ -1103,16 +1172,16 @@ export class AppController {
     const activeProxyRule = proxiesRules.find((rule) => rule.isEnabled);
     wrap.innerHTML = `
       <article class="admin-guide-card">
-        <h3>Если хотите открыть вход в прокси</h3>
-        <p>${activeProxyRule ? `Сейчас для прокси уже есть активное правило: «${this.escapeHtml(activeProxyRule.label)}». Ниже можно быстро создать новый пароль для прокси или отредактировать существующие правила.` : "Сейчас активного пароля для proxies_mode нет. Ниже можно сразу создать пароль для прокси в упрощенной форме."}</p>
+        <h3>Как быстро открыть прокси</h3>
+        <p>${activeProxyRule ? `Сейчас активен пароль «${this.escapeHtml(activeProxyRule.label)}». Ниже можно сразу создать новый пароль для proxies_mode или отключить старый в разделе правил доступа.` : "Сейчас активного пароля для proxies_mode нет. Ниже можно создать его в одну форму без переходов по админке."}</p>
       </article>
       <article class="admin-guide-card">
-        <h3>Если хотите срочно закрыть доступ</h3>
-        <p>Используйте кнопку «Мгновенно заблокировать». Она сбросит активные сессии защищенных режимов.</p>
+        <h3>Как быстро закрыть доступ</h3>
+        <p>Кнопка «Мгновенно заблокировать» сразу сбрасывает защищенные сессии. После этого при необходимости выключите или архивируйте нужные правила доступа.</p>
       </article>
       <article class="admin-guide-card">
-        <h3>Если хотите спрятать donate-блок</h3>
-        <p>Переключите видимость donate в блоке «Donate и кошельки». Там же меняются адреса кошельков.</p>
+        <h3>Где менять donate и кошельки</h3>
+        <p>Ниже есть отдельный блок «Donate и кошельки». Там меняется видимость donate, адреса и включение конкретных wallet entries.</p>
       </article>
     `;
 
@@ -1261,7 +1330,7 @@ export class AppController {
     const helper = document.createElement("div");
     helper.className = "admin-helper";
     helper.innerHTML = `
-      <p><strong>Как читать этот блок:</strong> одно правило = один пароль = один режим сайта. Сначала создайте новое правило, потом при необходимости отключайте, архивируйте или меняйте пароль у существующих.</p>
+      <p><strong>Как пользоваться:</strong> хотите добавить пароль — создайте новое правило. Хотите поменять пароль — откройте рабочее правило и введите новый пароль. Хотите временно выключить — снимите «включено». Хотите убрать совсем — отправьте правило в архив.</p>
     `;
     wrap.append(helper);
 
@@ -1386,7 +1455,7 @@ export class AppController {
           <input name="softDelete" type="checkbox" ${rule.softDeletedAt ? "checked" : ""} />
         </label>
         <details class="admin-advanced">
-          <summary>Редкое и служебное</summary>
+          <summary>Дополнительно: название, лимиты, срок, заметки</summary>
           <div class="admin-advanced-grid">
             <label>Название правила
               <input name="label" value="${this.escapeHtml(rule.label)}" />
@@ -1486,6 +1555,29 @@ export class AppController {
     }
 
     return wrap;
+  }
+
+  private renderAdminUtility(payload: AdminPayload): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "admin-list admin-utility-stack";
+    wrap.append(
+      this.renderExports(),
+      this.sectionInset("Последние события", "Недавние входы и изменения в админке.", this.renderAudit(payload.audit))
+    );
+    return wrap;
+  }
+
+  private sectionInset(title: string, description: string, content: HTMLElement): HTMLElement {
+    const card = document.createElement("section");
+    card.className = "admin-inset-card";
+    card.innerHTML = `
+      <div class="admin-subsection-header">
+        <h3>${title}</h3>
+        <p>${description}</p>
+      </div>
+    `;
+    card.append(content);
+    return card;
   }
 
   private renderExports(): HTMLElement {
@@ -1596,12 +1688,24 @@ export class AppController {
     });
 
     card.innerHTML = `
+      <div class="wallet-card-top">
+        <button type="button" class="panel-close panel-close-inline" aria-label="Закрыть окно">
+          <span class="panel-close-line"></span>
+          <span class="panel-close-line"></span>
+        </button>
+      </div>
       <h2>${wallet.title}</h2>
       <img alt="${wallet.title} qr" />
       <code>${wallet.address}</code>
       <button type="button" class="copy-button">${this.copiedWalletId === wallet.id ? "copied" : "copy address"}</button>
       <p>${wallet.warningText}</p>
     `;
+
+    card.querySelector<HTMLButtonElement>(".panel-close-inline")?.addEventListener("click", () => {
+      this.walletOverlay = null;
+      this.copiedWalletId = null;
+      this.render();
+    });
 
     const button = card.querySelector<HTMLButtonElement>(".copy-button");
     button?.addEventListener("click", async () => {

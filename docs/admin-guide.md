@@ -20,12 +20,15 @@ This bootstrap path is required to prevent the deadlock where `admin_mode` is lo
 - readable grouped controls
 - no default browser-form look
 - same graphite visual world as the rest of the site
+- top-right close control returns to the home scene without reload
 - short success or error feedback after save actions
 - access rules grouped into:
   - quick proxy password creation
+  - create new rule
   - working rules
   - disabled rules
   - archive
+- first row shows current state and quick actions before detailed controls
 - advanced rule fields stay hidden behind an explicit expanded section by default
 
 ## What It Can Do

@@ -46,6 +46,7 @@ ASCII layout:
 Rules:
 - top stack sits above center with breathing room
 - `tg` is a filled circle slightly lighter than the background
+- `tg` first attempts to open Telegram app directly, then falls back to web only if the app handoff fails
 - `2026` is quieter than the name line
 - almost any tap outside interactive elements starts hidden password entry
 - donate block is centered near the bottom and fully admin-driven
@@ -92,6 +93,7 @@ Rules:
 - two characters become two huge adjacent forms
 - from three characters onward the block grows by optical fill, not textarea-style word wrapping
 - text is visible, uppercase visually, case-insensitive in validation
+- weight must feel heavy, dense, and visually confident rather than thin default text
 - cursor stays at the end of the last line
 - letter spacing stays tight; word spacing is wider than letter spacing
 - the block should read as a fullscreen typographic lockup
@@ -104,8 +106,8 @@ Rules:
 ## Proxies Mode
 
 - same graphite world
-- compact center column slightly above true center
-- title then status line then optional stale line then 3x3 fresh grid then archive
+- compact centered panel with close control in the corner
+- title then status card then 3x3 fresh grid then archive
 
 Fresh grid:
 - up to 9 cards
@@ -136,13 +138,20 @@ Archive:
 - mobile grid: 5 columns
 - desktop grid: 10 columns
 - archive card content: only `#number`
+- opening archive must not flash or rebuild the whole proxies scene
 
 ## Hidden Admin
 
 - same graphite environment
 - utilitarian, not marketing
-- left-aligned sections inside a centered panel
-- cards for health, mode controls, access rules, wallets, audit, exports
+- close control in the corner that returns to home without reload
+- top row explains what this screen is
+- first row surfaces current state and quick actions
+- then clear blocks for:
+  - access rules
+  - modes
+  - donate and wallets
+  - service/export/history
 - sensitive actions use clear destructive styling but remain visually calm
 
 ## Motion

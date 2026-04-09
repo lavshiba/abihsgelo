@@ -210,10 +210,17 @@ If the Worker is down:
 
 Current admin UX principles:
 - fast first paint after successful password entry, with admin shell visible before payload fetch completes
+- panel close buttons return protected panels back to home without reload
 - quick proxy password creation as the shortest path after first bootstrap login
 - active, disabled, and archived access rules separated into clearer groups
 - save actions show short success or error feedback instead of silently re-rendering
 - browser admin payload excludes password hash internals
+
+Current panel UX principles:
+- successful password entry opens the target panel quickly on both desktop and mobile
+- `tg` tries Telegram app first, then uses web fallback only if app handoff fails
+- password monolith stays heavy and dense, not thin default text
+- proxies mode is arranged as a tighter centered panel with smoother archive reveal
 
 See [docs/admin-guide.md](/home/abihsgelo/Документы/abihsgelo/docs/admin-guide.md).
 

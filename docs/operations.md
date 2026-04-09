@@ -55,6 +55,8 @@ If D1 is empty and `ADMIN_BOOTSTRAP_PASSWORD` is missing:
 When validating a release, verify both:
 - desktop hidden entry submit with `Enter`
 - mobile-like hidden entry submit with `enter/done/go` behavior
+- panel close controls return to home without reload for both `admin_mode` and `proxies_mode`
+- `tg` button attempts Telegram app deep-link before web fallback
 
 The implementation uses an invisible focused text control behind the typographic monolith, so regressions usually show up as keyboard-submit failures rather than visual breakage.
 
