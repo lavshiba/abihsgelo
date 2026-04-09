@@ -170,8 +170,11 @@ The hidden password scene keeps its invisible input model in production:
 Passwords are never stored raw. Each access rule stores:
 - `password_hash`
 - `password_salt`
+- `hash_scheme`
 - mode target
 - usage and expiry fields
+
+Current rules use native `PBKDF2-SHA-256` with per-rule salt plus server-side pepper. Older `scrypt_v1` rules remain valid during migration and are upgraded automatically after a successful login.
 
 Passwords are checked only by the Worker. Frontend rendering uses an in-memory session token that disappears on reload.
 

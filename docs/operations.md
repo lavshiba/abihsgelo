@@ -61,6 +61,11 @@ Current automated coverage includes:
 - mobile-like `beforeinput` line-break submit
 - newline fallback normalization inside the hidden control
 
+Worker auth hash notes:
+- current rules are created with native `PBKDF2-SHA-256`
+- old `scrypt_v1` rules still work during migration
+- successful login on a legacy rule upgrades it automatically to the current scheme
+
 ## Panic Mode
 
 Panic mode is a site setting. When enabled:

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS access_rules (
   label TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   password_salt TEXT NOT NULL,
+  hash_scheme TEXT NOT NULL DEFAULT 'pbkdf2_sha256_v1',
   target_mode TEXT NOT NULL REFERENCES content_modes(id),
   is_enabled INTEGER NOT NULL DEFAULT 1,
   priority INTEGER NOT NULL DEFAULT 100,

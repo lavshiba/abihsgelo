@@ -20,7 +20,7 @@ This temporary split exists because the account currently has no Cloudflare zone
 2. Frontend calls `/api/bootstrap`.
 3. Public home scene renders from bootstrap data or static defaults.
 4. Hidden password entry submits to `/api/auth/enter`.
-5. Worker validates password against D1 access rules using peppered salted hash.
+5. Worker validates password against D1 access rules using peppered salted hashes with a versioned `hash_scheme`.
 6. Worker returns a short-lived session token for the current tab only.
 7. Frontend requests `/api/modes/:mode`.
 8. Worker authorizes mode access based on public-lock state, session token, and session version.
@@ -32,6 +32,11 @@ Bootstrap safeguard:
 4. That seeded rule targets only `admin_mode`.
 5. Operator uses the hidden password monolith to enter `admin_mode`, then creates the first `proxies_mode` rule and any later rules from hidden admin.
 6. If D1 is empty and the bootstrap secret is missing, `/healthz` returns a bootstrap failure and deploy checks must fail.
+
+Password-hash migration:
+- new and rotated rules use native `PBKDF2-SHA-256` so auth stays within Cloudflare Worker resource limits
+- older `scrypt_v1` rules still verify successfully
+- after a successful login on a legacy rule, the Worker rehashes it to the current scheme
 
 ## Route Surface
 

@@ -2,7 +2,7 @@ import type { AdminPayload } from "@abihsgelo/shared";
 import type { Env } from "./db";
 import { addAudit, getBootstrap, getBootstrapStatus, getModeState, getProxyPayload, listAccessRules, listModes, listWallets, setSetting } from "./db";
 import { refreshProxyState } from "./proxy";
-import { hashPassword, hashToken, randomHex } from "./security";
+import { LEGACY_PASSWORD_HASH_SCHEME, PASSWORD_HASH_SCHEME, hashPassword, hashToken, randomHex, verifyPassword } from "./security";
 
 type JsonBody = Record<string, unknown>;
 
@@ -218,29 +218,54 @@ async function authenticate(env: Env, password: string, ctx: ExecutionContext): 
       continue;
     }
 
-    const hash = await hashPassword(password, rule.passwordSalt, env.PEPPER);
-    if (hash !== rule.passwordHash) {
+    const passwordOk = await verifyPassword(password, rule.passwordSalt, env.PEPPER, rule.passwordHash, rule.hashScheme);
+    if (!passwordOk) {
       continue;
     }
+
+    const requiresRehash = !rule.hashScheme || rule.hashScheme === LEGACY_PASSWORD_HASH_SCHEME;
+    const nextSalt = requiresRehash ? randomHex(16) : null;
+    const nextHash = requiresRehash && nextSalt ? await hashPassword(password, nextSalt, env.PEPPER) : null;
 
     const token = randomHex(32);
     const tokenHash = hashToken(token, env.SESSION_SECRET);
     const version = await env.DB.prepare(`SELECT session_version FROM proxy_state WHERE id = 1`).first<{ session_version: number }>();
 
-    await env.DB.batch([
+    const writes = [
       env.DB.prepare(
         `INSERT INTO sessions (id, token_hash, mode_id, expires_at, created_at, version, is_revoked)
          VALUES (?1, ?2, ?3, datetime('now', '+6 hours'), CURRENT_TIMESTAMP, ?4, 0)`
-      ).bind(randomHex(12), tokenHash, rule.targetMode, version?.session_version ?? 1),
-      env.DB.prepare(
-        `UPDATE access_rules
-         SET usage_count = usage_count + 1,
-             success_count = success_count + 1,
-             last_used_at = CURRENT_TIMESTAMP,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?1`
-      ).bind(rule.id)
-    ]);
+      ).bind(randomHex(12), tokenHash, rule.targetMode, version?.session_version ?? 1)
+    ];
+
+    if (requiresRehash && nextHash && nextSalt) {
+      writes.push(
+        env.DB.prepare(
+          `UPDATE access_rules
+           SET password_hash = ?2,
+               password_salt = ?3,
+               hash_scheme = ?4,
+               usage_count = usage_count + 1,
+               success_count = success_count + 1,
+               last_used_at = CURRENT_TIMESTAMP,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?1`
+        ).bind(rule.id, nextHash, nextSalt, PASSWORD_HASH_SCHEME)
+      );
+    } else {
+      writes.push(
+        env.DB.prepare(
+          `UPDATE access_rules
+           SET usage_count = usage_count + 1,
+               success_count = success_count + 1,
+               last_used_at = CURRENT_TIMESTAMP,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?1`
+        ).bind(rule.id)
+      );
+    }
+
+    await env.DB.batch(writes);
 
     ctx.waitUntil(
       Promise.resolve().then(async () => {
@@ -370,15 +395,16 @@ async function createAccessRule(env: Env, body: JsonBody): Promise<void> {
   const id = randomHex(12);
   await env.DB.prepare(
     `INSERT INTO access_rules (
-      id, label, password_hash, password_salt, target_mode, is_enabled, priority, notes,
+      id, label, password_hash, password_salt, hash_scheme, target_mode, is_enabled, priority, notes,
       usage_count, success_count, fail_count, last_used_at, created_at, updated_at,
       expires_at, max_uses, first_use_only, soft_deleted_at
-    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, 0, 0, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?9, ?10, ?11, NULL)`
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, 0, 0, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?10, ?11, ?12, NULL)`
   ).bind(
     id,
     String(body.label ?? id),
     hash,
     salt,
+    PASSWORD_HASH_SCHEME,
     String(body.targetMode ?? "home_mode"),
     body.isEnabled === false ? 0 : 1,
     Number(body.priority ?? 100),
@@ -411,7 +437,7 @@ async function ensureAdminBootstrapRule(env: Env): Promise<void> {
   const hash = await hashPassword(bootstrapPassword, salt, env.PEPPER);
   await env.DB.prepare(
     `INSERT OR IGNORE INTO access_rules (
-      id, label, password_hash, password_salt, target_mode, is_enabled, priority, notes,
+      id, label, password_hash, password_salt, hash_scheme, target_mode, is_enabled, priority, notes,
       usage_count, success_count, fail_count, last_used_at, created_at, updated_at,
       expires_at, max_uses, first_use_only, soft_deleted_at
     ) VALUES (
@@ -419,6 +445,7 @@ async function ensureAdminBootstrapRule(env: Env): Promise<void> {
       'bootstrap admin access',
       ?1,
       ?2,
+      ?3,
       'admin_mode',
       1,
       1000,
@@ -434,7 +461,7 @@ async function ensureAdminBootstrapRule(env: Env): Promise<void> {
       0,
       NULL
     )`
-  ).bind(hash, salt).run();
+  ).bind(hash, salt, PASSWORD_HASH_SCHEME).run();
 
   await addAudit(env, "admin_bootstrap_rule_seeded", "system", { mode: "admin_mode" });
 }
@@ -456,8 +483,8 @@ async function updateAccessRule(env: Env, id: string, body: JsonBody): Promise<v
   if (body.password && String(body.password).trim()) {
     const salt = randomHex(16);
     const hash = await hashPassword(String(body.password), salt, env.PEPPER);
-    passwordFragment = ", password_hash = ?10, password_salt = ?11";
-    bindValues.push(hash, salt);
+    passwordFragment = ", password_hash = ?10, password_salt = ?11, hash_scheme = ?12";
+    bindValues.push(hash, salt, PASSWORD_HASH_SCHEME);
   }
 
   bindValues.push(id);
@@ -473,7 +500,7 @@ async function updateAccessRule(env: Env, id: string, body: JsonBody): Promise<v
         soft_deleted_at = CASE WHEN ?9 = 1 THEN COALESCE(soft_deleted_at, CURRENT_TIMESTAMP) ELSE NULL END,
         updated_at = CURRENT_TIMESTAMP
         ${passwordFragment}
-    WHERE id = ?${passwordFragment ? 12 : 10}`;
+    WHERE id = ?${passwordFragment ? 13 : 10}`;
   await env.DB.prepare(statement).bind(...bindValues).run();
   await addAudit(env, "admin_change_access_rule", "admin", { id });
 }
@@ -610,15 +637,16 @@ async function importJson(env: Env, kind: string, body: unknown): Promise<void> 
     for (const row of body as Array<Record<string, unknown>>) {
       await env.DB.prepare(
         `INSERT INTO access_rules (
-          id, label, password_hash, password_salt, target_mode, is_enabled, priority, notes,
+          id, label, password_hash, password_salt, hash_scheme, target_mode, is_enabled, priority, notes,
           usage_count, success_count, fail_count, last_used_at, created_at, updated_at,
           expires_at, max_uses, first_use_only, soft_deleted_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, COALESCE(?13, CURRENT_TIMESTAMP), COALESCE(?14, CURRENT_TIMESTAMP), ?15, ?16, ?17, ?18)`
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, COALESCE(?14, CURRENT_TIMESTAMP), COALESCE(?15, CURRENT_TIMESTAMP), ?16, ?17, ?18, ?19)`
       ).bind(
         String(row.id),
         String(row.label),
         String(row.password_hash ?? row.passwordHash),
         String(row.password_salt ?? row.passwordSalt),
+        String(row.hash_scheme ?? row.hashScheme ?? LEGACY_PASSWORD_HASH_SCHEME),
         String(row.target_mode ?? row.targetMode),
         Number(row.is_enabled ?? row.isEnabled ?? 1),
         Number(row.priority ?? 100),

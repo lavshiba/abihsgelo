@@ -14,6 +14,7 @@ export interface Env {
 export interface AuthRuleRecord extends AccessRuleSummary {
   passwordHash: string;
   passwordSalt: string;
+  hashScheme: string | null;
 }
 
 export interface BootstrapStatus {
@@ -70,7 +71,7 @@ export async function listModes(env: Env): Promise<ModeSummary[]> {
 
 export async function listAccessRules(env: Env, includeSoftDeleted = false): Promise<AuthRuleRecord[]> {
   const result = await env.DB.prepare(
-    `SELECT id, label, password_hash AS passwordHash, password_salt AS passwordSalt, target_mode AS targetMode,
+    `SELECT id, label, password_hash AS passwordHash, password_salt AS passwordSalt, hash_scheme AS hashScheme, target_mode AS targetMode,
             is_enabled AS isEnabled, priority, notes, usage_count AS usageCount, success_count AS successCount,
             fail_count AS failCount, last_used_at AS lastUsedAt, created_at AS createdAt, updated_at AS updatedAt,
             expires_at AS expiresAt, max_uses AS maxUses, first_use_only AS firstUseOnly, soft_deleted_at AS softDeletedAt
