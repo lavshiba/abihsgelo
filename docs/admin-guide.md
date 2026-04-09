@@ -23,22 +23,26 @@ This bootstrap path is required to prevent the deadlock where `admin_mode` is lo
 - top-right close control returns to the home scene without reload
 - short success or error feedback after save actions
 - compact collapsible sections keep desktop and mobile from turning into one endless page
-- the top bar is always visible first: panel meaning on the left, close control on the right
-- default open sections are:
-  - current state
+- the top bar is always visible first: panel meaning on the left, short status strip below it, close control on the right
+- there are only four primary blocks:
+  - access
   - quick actions
-  - access rules
-- less frequent sections stay collapsed until needed:
-  - modes
-  - donate and wallets
-  - service/export/audit
-- access rules grouped into:
+  - wallets
+  - service
+- only access is open by default
+- quick actions contain only:
+  - open password entry for proxies
+  - refresh now
+  - lock now
+  - show or hide donate
+- access groups:
   - quick proxy password creation
   - create new rule
-  - working rules
+  - active rules
   - disabled rules
   - archive
-- first row shows current state and quick actions before detailed controls
+  - nested mode controls
+- wallets contains both donate visibility and full wallet entry editing
 - advanced rule fields stay hidden behind an explicit expanded section by default
 
 ## What It Can Do
@@ -58,6 +62,8 @@ This bootstrap path is required to prevent the deadlock where `admin_mode` is lo
 - enable or disable modes
 - choose default public mode
 - manage wallet entries and ordering
+- change wallet labels
+- change wallet QR payload values
 - show or hide the donate block
 - run `refresh now`
 - run `lock now`

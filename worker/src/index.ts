@@ -522,17 +522,21 @@ async function updateMode(env: Env, id: string, body: JsonBody): Promise<void> {
 async function updateWallet(env: Env, id: string, body: JsonBody): Promise<void> {
   await env.DB.prepare(
     `UPDATE wallets
-     SET address = ?1,
-         qr_payload = ?2,
-         warning_text = ?3,
-         is_enabled = ?4,
+     SET title = ?1,
+         address = ?2,
+         qr_payload = ?3,
+         warning_text = ?4,
+         is_enabled = ?5,
+         sort_order = ?6,
          updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?5`
+     WHERE id = ?7`
   ).bind(
+    String(body.title ?? ""),
     String(body.address ?? ""),
     String(body.qrPayload ?? body.address ?? ""),
     String(body.warningText ?? ""),
     body.isEnabled ? 1 : 0,
+    Number(body.sortOrder ?? 100),
     id
   ).run();
   await addAudit(env, "wallet_update", "admin", { id });

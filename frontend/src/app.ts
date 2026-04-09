@@ -13,7 +13,7 @@ import type {
 type SceneState = "home" | "password" | "mode";
 type PasswordVisualState = "clearing" | "cursor" | "typing" | "success" | "fail" | "timeout";
 type ScrollTarget = "archive" | "fresh" | null;
-type AdminSectionKey = "overview" | "quick" | "access" | "modes" | "wallets" | "service";
+type AdminSectionKey = "access" | "quick" | "wallets" | "service";
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") ?? "";
 const PASSWORD_TIMEOUT_MS = 3800;
@@ -90,10 +90,8 @@ export class AppController {
   private panelClosing = false;
   private panelCloseHandle: number | null = null;
   private adminSections: Record<AdminSectionKey, boolean> = {
-    overview: true,
-    quick: true,
     access: true,
-    modes: false,
+    quick: false,
     wallets: false,
     service: false
   };
@@ -272,6 +270,37 @@ export class AppController {
       this.scene = "home";
       this.render();
     }, 170);
+  }
+
+  private openPasswordSceneFromPanel(): void {
+    if (this.scene !== "mode" || this.panelClosing) {
+      return;
+    }
+
+    if (this.panelCloseHandle !== null) {
+      window.clearTimeout(this.panelCloseHandle);
+    }
+
+    this.clearPasswordFlow();
+    this.passwordBuffer = "";
+    this.passwordVisualState = "clearing";
+    this.passwordSubmitPending = false;
+    this.panelClosing = true;
+    this.render();
+    this.panelCloseHandle = window.setTimeout(() => {
+      this.panelClosing = false;
+      this.panelCloseHandle = null;
+      this.archiveOpen = false;
+      this.walletOverlay = null;
+      this.session = { token: null, mode: null };
+      this.scene = "password";
+      this.render();
+      this.pushTransition(() => {
+        this.passwordVisualState = "cursor";
+        this.render();
+        this.resetPasswordTimeout();
+      }, 90);
+    }, 150);
   }
 
   private enterPasswordScene(): void {
@@ -980,7 +1009,7 @@ export class AppController {
     this.openTelegramTarget(this.telegramChannelDeepLink(channelUrl), channelUrl);
   }
 
-  private openTelegramTarget(deepLink: string, fallbackUrl: string): void {
+  private openTelegramTarget(deepLink: string, fallbackUrl: string, fallbackInNewTab = true): void {
     let handled = false;
     let timer = 0;
 
@@ -1007,6 +1036,10 @@ export class AppController {
       }
       handled = true;
       cleanup();
+      if (fallbackInNewTab) {
+        this.openUrlInNewTab(fallbackUrl);
+        return;
+      }
       this.navigateToUrl(fallbackUrl);
     };
 
@@ -1052,6 +1085,19 @@ export class AppController {
     window.location.assign(url);
   }
 
+  private openUrlInNewTab(url: string): void {
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (opened) {
+      return;
+    }
+
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.click();
+  }
+
   private telegramDeepLink(proxyUrl: string): string {
     try {
       const url = new URL(proxyUrl);
@@ -1082,7 +1128,7 @@ export class AppController {
       <div class="admin-topbar-copy">
         <p class="admin-kicker">hidden admin</p>
         <h1>Панель управления</h1>
-        <p class="admin-intro-copy">Минималистичная скрытая админка для доступов, режимов, кошельков и быстрых действий. Сверху самое частое, ниже точное управление без лишнего шума.</p>
+        <p class="admin-intro-copy">Скрытая control panel для доступов, кошельков и быстрых действий без лишнего шума.</p>
       </div>
     `;
     header.append(this.renderPanelCloseButton("Вернуться на главную"));
@@ -1100,15 +1146,15 @@ export class AppController {
       return shell;
     }
 
+    shell.append(this.renderAdminTopStatus(payload));
+
     const stack = document.createElement("section");
     stack.className = "admin-section-stack";
     stack.append(
-      this.renderAdminSection("overview", "Сейчас на сайте", "Короткая сводка по текущему состоянию.", this.renderAdminOverview(payload), "статус"),
-      this.renderAdminSection("quick", "Быстрые действия", "Самые частые сценарии без лишнего поиска.", this.renderAdminGuide(payload), "сразу под рукой"),
-      this.renderAdminSection("access", "Правила доступа", "Пароли, режимы, отключение и архив.", this.renderAccessRules(payload.accessRules, payload.modes), `${payload.accessRules.filter((rule) => !rule.softDeletedAt).length} правил`),
-      this.renderAdminSection("modes", "Режимы сайта", "Что открыто публично и какие режимы включены.", this.renderModes(payload.modes), `${payload.modes.length} режима`),
-      this.renderAdminSection("wallets", "Donate и кошельки", "Адреса, видимость donate и wallet entries.", this.renderWallets(payload.wallets, payload.settings), `${payload.wallets.length} кошелька`),
-      this.renderAdminSection("service", "Служебное", "Экспорт, импорт и последние административные события.", this.renderAdminUtility(payload), `${payload.audit.length} событий`)
+      this.renderAdminSection("access", "Access", "Добавить пароль, сменить пароль, назначить режим и убрать лишние правила в архив.", this.renderAccessRules(payload.accessRules, payload.modes), `${payload.accessRules.filter((rule) => rule.isEnabled && !rule.softDeletedAt).length} активных`),
+      this.renderAdminSection("quick", "Quick actions", "Только четыре частых действия: вход в proxies, refresh, lock и donate.", this.renderAdminGuide(payload), "4 действия"),
+      this.renderAdminSection("wallets", "Wallets", "Полное управление donate block и нижними сетями домашней сцены.", this.renderWallets(payload.wallets, payload.settings), `${payload.wallets.length} сети`),
+      this.renderAdminSection("service", "Service", "Health, export/import и короткая лента последних событий.", this.renderAdminUtility(payload), `${Math.min(payload.audit.length, 10)} событий`)
     );
 
     shell.append(stack);
@@ -1187,152 +1233,42 @@ export class AppController {
     return section;
   }
 
+  private renderAdminTopStatus(payload: AdminPayload): HTMLElement {
+    const publicMode = payload.modes.find((mode) => mode.isDefaultPublic);
+    const activeRules = payload.accessRules.filter((rule) => rule.isEnabled && !rule.softDeletedAt).length;
+    const wrap = document.createElement("section");
+    wrap.className = "admin-top-status";
+    wrap.innerHTML = `
+      <span class="admin-top-pill">публично: ${publicMode ? this.modeLabel(publicMode.id) : "не выбрано"}</span>
+      <span class="admin-top-pill">активных правил: ${activeRules}</span>
+      <span class="admin-top-pill">donate: ${payload.settings["donate.visible"] ? "on" : "off"}</span>
+      <span class="admin-top-pill">worker: ${String(payload.health.worker ?? "ok")}</span>
+    `;
+    return wrap;
+  }
+
   private renderHealth(payload: AdminPayload): HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "admin-list admin-health-list";
     wrap.innerHTML = Object.entries(payload.health)
       .map(([key, value]) => `<p><span>${this.healthLabel(key)}</span><strong>${this.healthValue(value)}</strong></p>`)
       .join("");
-
-    const actions = document.createElement("div");
-    actions.className = "admin-actions";
-
-    const refresh = document.createElement("button");
-    refresh.textContent = "Обновить прокси сейчас";
-    refresh.addEventListener("click", () => void this.adminAction("/api/admin/refresh-now", "Прокси обновлены."));
-
-    const lock = document.createElement("button");
-    lock.textContent = "Мгновенно заблокировать";
-    lock.className = "danger";
-    lock.addEventListener("click", () => void this.adminAction("/api/admin/lock-now", "Активные защищенные сессии сброшены."));
-
-    actions.append(refresh, lock);
-    wrap.append(actions);
-    return wrap;
-  }
-
-  private renderAdminOverview(payload: AdminPayload): HTMLElement {
-    const wrap = document.createElement("div");
-    wrap.className = "admin-overview-grid";
-
-    const modes = payload.modes;
-    const publicMode = modes.find((mode) => mode.isDefaultPublic);
-    const lockedModes = modes.filter((mode) => mode.accessState === "locked" && mode.isEnabled).length;
-    const activeRules = payload.accessRules.filter((rule) => rule.isEnabled && !rule.softDeletedAt).length;
-    const archivedRules = payload.accessRules.filter((rule) => Boolean(rule.softDeletedAt)).length;
-
-    const cards = [
-      {
-        label: "Публичная сцена",
-        value: publicMode ? this.modeLabel(publicMode.id) : "не выбрана",
-        hint: "Это то, что открывается всем без пароля."
-      },
-      {
-        label: "Закрытых режимов",
-        value: String(lockedModes),
-        hint: "Эти режимы требуют пароль."
-      },
-      {
-        label: "Активных правил доступа",
-        value: String(activeRules),
-        hint: "Ими можно войти прямо сейчас."
-      },
-      {
-        label: "Правил в архиве",
-        value: String(archivedRules),
-        hint: "Они сохранены, но не используются."
-      },
-      {
-        label: "Donate-блок",
-        value: payload.settings["donate.visible"] ? "показан" : "скрыт",
-        hint: "Настраивается ниже в блоке кошельков."
-      },
-      {
-        label: "Режим тревоги",
-        value: payload.settings["panic_mode"] ? "включен" : "выключен",
-        hint: "Глобальный аварийный переключатель."
-      }
-    ];
-
-    wrap.innerHTML = cards
-      .map((card) => `
-        <article class="admin-overview-card">
-          <p class="admin-overview-label">${card.label}</p>
-          <strong>${card.value}</strong>
-          <p class="admin-overview-hint">${card.hint}</p>
-        </article>
-      `)
-      .join("");
-
-    wrap.append(this.renderHealth(payload));
     return wrap;
   }
 
   private renderAdminGuide(payload: AdminPayload): HTMLElement {
-    const wrap = document.createElement("div");
-    wrap.className = "admin-guide-grid";
-
     const proxiesRules = payload.accessRules.filter((rule) => !rule.softDeletedAt && rule.targetMode === "proxies_mode");
     const activeProxyRule = proxiesRules.find((rule) => rule.isEnabled);
-    wrap.innerHTML = `
-      <article class="admin-guide-card">
-        <h3>Как быстро открыть прокси</h3>
-        <p>${activeProxyRule ? `Сейчас активен пароль «${this.escapeHtml(activeProxyRule.label)}». Ниже можно сразу создать новый пароль для proxies_mode или отключить старый в разделе правил доступа.` : "Сейчас активного пароля для proxies_mode нет. Ниже можно создать его в одну форму без переходов по админке."}</p>
-      </article>
-      <article class="admin-guide-card">
-        <h3>Как быстро закрыть доступ</h3>
-        <p>Кнопка «Мгновенно заблокировать» сразу сбрасывает защищенные сессии. После этого при необходимости выключите или архивируйте нужные правила доступа.</p>
-      </article>
-      <article class="admin-guide-card">
-        <h3>Где менять donate и кошельки</h3>
-        <p>Ниже есть отдельный блок «Donate и кошельки». Там меняется видимость donate, адреса и включение конкретных wallet entries.</p>
-      </article>
-    `;
-
-    const quickProxy = document.createElement("form");
-    quickProxy.className = "admin-form-row admin-form-card admin-create-card admin-quick-create";
-    quickProxy.innerHTML = `
-      <div class="admin-form-heading">
-        <strong>Быстро создать пароль для прокси</strong>
-        <p>Самый простой путь: введите пароль и сохраните. Это сразу создаст новое активное правило для режима «Прокси».</p>
-      </div>
-      <label>Название правила
-        <input name="label" value="доступ в прокси" />
-      </label>
-      <label>Пароль для входа в прокси
-        <input name="password" required />
-      </label>
-      <label>Комментарий
-        <input name="notes" placeholder="необязательно" />
-      </label>
-      <button type="submit">Создать пароль для прокси</button>
-    `;
-    quickProxy.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const form = new FormData(quickProxy);
-      void this.runAdminTask(
-        () => this.fetchJson(this.apiUrl("/api/admin/access-rules"), {
-          method: "POST",
-          headers: { ...this.authHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify({
-            label: String(form.get("label") ?? "доступ в прокси"),
-            targetMode: "proxies_mode",
-            priority: 100,
-            password: String(form.get("password") ?? ""),
-            notes: String(form.get("notes") ?? "")
-          })
-        }),
-        "Пароль для прокси создан."
-      ).then((result) => {
-        if (result !== undefined) {
-          quickProxy.reset();
-        }
-      });
-    });
-    wrap.append(quickProxy);
-
+    const wrap = document.createElement("div");
+    wrap.className = "admin-actions-panel";
     const actions = document.createElement("div");
     actions.className = "admin-actions admin-actions-wide";
+
+    const openProxies = document.createElement("button");
+    openProxies.textContent = activeProxyRule ? "Войти в proxies" : "Открыть ввод для proxies";
+    openProxies.addEventListener("click", () => {
+      this.openPasswordSceneFromPanel();
+    });
 
     const refresh = document.createElement("button");
     refresh.textContent = "Обновить прокси сейчас";
@@ -1343,8 +1279,29 @@ export class AppController {
     lock.className = "danger";
     lock.addEventListener("click", () => void this.adminAction("/api/admin/lock-now", "Активные защищенные сессии сброшены."));
 
-    actions.append(refresh, lock);
+    const donateToggle = document.createElement("button");
+    const donateVisible = Boolean(payload.settings["donate.visible"]);
+    donateToggle.textContent = donateVisible ? "Скрыть donate" : "Показать donate";
+    donateToggle.addEventListener("click", () => {
+      void this.runAdminTask(
+        () => this.fetchJson(this.apiUrl("/api/admin/settings"), {
+          method: "PUT",
+          headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            "donate.visible": !donateVisible
+          })
+        }),
+        donateVisible ? "Donate скрыт." : "Donate показан."
+      );
+    });
+
+    actions.append(openProxies, refresh, lock, donateToggle);
     wrap.append(actions);
+
+    const note = document.createElement("div");
+    note.className = "admin-helper";
+    note.innerHTML = `<p>${activeProxyRule ? `Сейчас активен пароль «${this.escapeHtml(activeProxyRule.label)}». Если нужно сменить его или создать новый, используйте главный блок Access.` : "Активного пароля для proxies сейчас нет. Создайте его в блоке Access."}</p>`;
+    wrap.append(note);
 
     return wrap;
   }
@@ -1401,13 +1358,10 @@ export class AppController {
     const form = document.createElement("form");
     form.className = "admin-form-row";
     form.innerHTML = `
-      <label>Показывать donate-блок
+      <label>Показывать donate block
         <input name="donate.visible" type="checkbox" ${settings["donate.visible"] ? "checked" : ""} />
       </label>
-      <label>Режим тревоги
-        <input name="panic_mode" type="checkbox" ${settings["panic_mode"] ? "checked" : ""} />
-      </label>
-      <button type="submit">Сохранить настройки</button>
+      <button type="submit">Сохранить donate</button>
     `;
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -1417,11 +1371,10 @@ export class AppController {
           method: "PUT",
           headers: { ...this.authHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({
-            "donate.visible": data.get("donate.visible") === "on",
-            panic_mode: data.get("panic_mode") === "on"
+            "donate.visible": data.get("donate.visible") === "on"
           })
         }),
-        "Глобальные настройки сохранены."
+        "Donate-настройка сохранена."
       );
     });
     return form;
@@ -1431,12 +1384,7 @@ export class AppController {
     const wrap = document.createElement("div");
     wrap.className = "admin-list";
 
-    const helper = document.createElement("div");
-    helper.className = "admin-helper";
-    helper.innerHTML = `
-      <p><strong>Как пользоваться:</strong> хотите добавить пароль — создайте новое правило. Хотите поменять пароль — откройте рабочее правило и введите новый пароль. Хотите временно выключить — снимите «включено». Хотите убрать совсем — отправьте правило в архив.</p>
-    `;
-    wrap.append(helper);
+    wrap.append(this.renderQuickProxyRuleCreate());
 
     const add = document.createElement("form");
     add.className = "admin-form-row admin-form-card admin-create-card";
@@ -1505,7 +1453,62 @@ export class AppController {
       wrap.append(this.renderRuleGroup("Архив", "Старые или временно отключенные правила. Их можно вернуть или оставить как историю.", archivedRules, modes, true));
     }
 
+    const modesSection = document.createElement("details");
+    modesSection.className = "admin-inset-card admin-section-inline";
+    modesSection.innerHTML = `
+      <summary class="admin-subsection-header">
+        <h3>Режимы сайта</h3>
+        <p>Публичность, блокировка и режим по умолчанию.</p>
+      </summary>
+    `;
+    modesSection.append(this.renderModes(modes));
+    wrap.append(modesSection);
+
     return wrap;
+  }
+
+  private renderQuickProxyRuleCreate(): HTMLElement {
+    const quickProxy = document.createElement("form");
+    quickProxy.className = "admin-form-row admin-form-card admin-create-card admin-quick-create";
+    quickProxy.innerHTML = `
+      <div class="admin-form-heading">
+        <strong>Быстрый пароль для proxies_mode</strong>
+        <p>Самый короткий путь: введите пароль и сохраните новое правило для прокси.</p>
+      </div>
+      <label>Название
+        <input name="label" value="доступ в прокси" />
+      </label>
+      <label>Пароль
+        <input name="password" required />
+      </label>
+      <label>Комментарий
+        <input name="notes" placeholder="необязательно" />
+      </label>
+      <button type="submit">Создать пароль для прокси</button>
+    `;
+    quickProxy.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const form = new FormData(quickProxy);
+      void this.runAdminTask(
+        () => this.fetchJson(this.apiUrl("/api/admin/access-rules"), {
+          method: "POST",
+          headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            label: String(form.get("label") ?? "доступ в прокси"),
+            targetMode: "proxies_mode",
+            priority: 100,
+            password: String(form.get("password") ?? ""),
+            notes: String(form.get("notes") ?? "")
+          })
+        }),
+        "Пароль для прокси создан."
+      ).then((result) => {
+        if (result !== undefined) {
+          quickProxy.reset();
+        }
+      });
+    });
+    return quickProxy;
   }
 
   private renderRuleGroup(title: string, description: string, rules: AccessRuleSummary[], modes: ModeSummary[], collapsed = false): HTMLElement {
@@ -1626,17 +1629,21 @@ export class AppController {
 
     wrap.append(this.renderSettings(settings));
 
-    for (const wallet of wallets) {
+    const sorted = [...wallets].sort((left, right) => left.sortOrder - right.sortOrder);
+    for (const wallet of sorted) {
       const row = document.createElement("form");
       row.className = "admin-form-row admin-form-card";
       row.innerHTML = `
         <div class="admin-form-heading">
           <strong>${wallet.network.toUpperCase()}</strong>
-          <p>${wallet.title}</p>
+          <p>Текущая подпись: ${wallet.title}</p>
         </div>
-        <label>Адрес кошелька <input name="address" value="${this.escapeHtml(wallet.address)}" /></label>
-        <label>Предупреждение под адресом <input name="warningText" value="${this.escapeHtml(wallet.warningText)}" /></label>
-        <label>Показывать этот кошелек <input name="isEnabled" type="checkbox" ${wallet.isEnabled ? "checked" : ""} /></label>
+        <label>Подпись сети <input name="title" value="${this.escapeHtml(wallet.title)}" /></label>
+        <label>Адрес <input name="address" value="${this.escapeHtml(wallet.address)}" /></label>
+        <label>QR payload <input name="qrPayload" value="${this.escapeHtml(wallet.qrPayload)}" /></label>
+        <label>Предупреждение <input name="warningText" value="${this.escapeHtml(wallet.warningText)}" /></label>
+        <label>Порядок <input name="sortOrder" type="number" value="${wallet.sortOrder}" /></label>
+        <label>Показывать сеть <input name="isEnabled" type="checkbox" ${wallet.isEnabled ? "checked" : ""} /></label>
         <button type="submit">Сохранить кошелек</button>
       `;
       row.addEventListener("submit", (event) => {
@@ -1647,8 +1654,11 @@ export class AppController {
             method: "PUT",
             headers: { ...this.authHeaders(), "Content-Type": "application/json" },
             body: JSON.stringify({
+              title: form.get("title"),
               address: form.get("address"),
+              qrPayload: form.get("qrPayload"),
               warningText: form.get("warningText"),
+              sortOrder: Number(form.get("sortOrder") ?? wallet.sortOrder),
               isEnabled: form.get("isEnabled") === "on"
             })
           }),
@@ -1664,10 +1674,36 @@ export class AppController {
   private renderAdminUtility(payload: AdminPayload): HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "admin-list admin-utility-stack";
-    wrap.append(
-      this.renderExports(),
-      this.sectionInset("Последние события", "Недавние входы и изменения в админке.", this.renderAudit(payload.audit))
-    );
+
+    const summary = document.createElement("div");
+    summary.className = "admin-service-summary";
+    summary.innerHTML = `
+      <article class="admin-overview-card">
+        <p class="admin-overview-label">worker</p>
+        <strong>${this.healthValue(payload.health.worker)}</strong>
+      </article>
+      <article class="admin-overview-card">
+        <p class="admin-overview-label">refresh</p>
+        <strong>${this.healthValue(payload.health.last_refresh_status)}</strong>
+      </article>
+      <article class="admin-overview-card">
+        <p class="admin-overview-label">bootstrap</p>
+        <strong>${this.healthValue(payload.health.bootstrapMessage)}</strong>
+      </article>
+    `;
+
+    const auditCard = this.sectionInset("Последние события", "Последние 8 действий.", this.renderAudit(payload.audit.slice(0, 8)));
+    const healthDetails = document.createElement("details");
+    healthDetails.className = "admin-inset-card admin-section-inline";
+    healthDetails.innerHTML = `
+      <summary class="admin-subsection-header">
+        <h3>Подробный health</h3>
+        <p>Полный технический статус и тайминги.</p>
+      </summary>
+    `;
+    healthDetails.append(this.renderHealth(payload));
+
+    wrap.append(summary, this.renderExports(), auditCard, healthDetails);
     return wrap;
   }
 
@@ -1743,6 +1779,10 @@ export class AppController {
   private renderAudit(audit: AdminPayload["audit"]): HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "admin-list";
+    if (audit.length === 0) {
+      wrap.innerHTML = `<p><span>события</span><strong>пока пусто</strong></p>`;
+      return wrap;
+    }
     wrap.innerHTML = audit
       .map((entry) => `<p><span>${this.auditEventLabel(entry.eventType)}</span><strong>${this.formatTimestamp(entry.createdAt)}</strong></p>`)
       .join("");

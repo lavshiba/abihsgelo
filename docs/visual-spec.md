@@ -46,7 +46,9 @@ ASCII layout:
 Rules:
 - top stack sits above center with breathing room
 - `tg` is a filled circle slightly lighter than the background
-- `tg` first attempts to open Telegram app directly, then falls back to web only if the app handoff fails
+- `tg` first attempts to open Telegram app directly
+- if the app handoff fails, web fallback opens in a new tab
+- current `abihsgelo.pages.dev` tab must stay in place and must not be replaced by Telegram website
 - `2026` is quieter than the name line
 - almost any tap outside interactive elements starts hidden password entry
 - donate block is centered near the bottom and fully admin-driven
@@ -96,6 +98,8 @@ Rules:
 - weight must feel heavy, dense, and visually confident rather than thin default text
 - live layout should fill almost the entire viewport like a typographic poster, not a neat centered text block
 - rows should stretch vertically so free graphite around the monolith is minimal
+- inter-line air should be extremely tight
+- background should remain only in narrow channels rather than wide empty fields
 - cursor stays at the end of the last line
 - letter spacing stays tight; word spacing is wider than letter spacing
 - the block should read as a fullscreen typographic lockup
@@ -148,15 +152,15 @@ Archive:
 - utilitarian, not marketing
 - close control in the corner that returns to home without reload
 - clean top bar explains what this screen is
-- content lives in compact collapsible sections instead of one giant always-open page
-- default open sections are only the most used minimum:
-  - current state
+- top bar also carries a short status strip
+- below the top bar there are only four compact primary blocks:
+  - access
   - quick actions
-  - access rules
-- secondary sections stay collapsed until explicitly opened:
-  - modes
-  - donate and wallets
-  - service/export/history
+  - wallets
+  - service
+- access is the main block and stays open by default
+- quick actions, wallets, and service stay collapsed by default
+- modes management lives as a secondary nested section inside access, not as a separate giant dashboard block
 - mobile admin must feel like a compact hidden control panel rather than an endless raw-form scroll
 - sensitive actions use clear destructive styling but remain visually calm
 

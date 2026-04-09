@@ -121,7 +121,7 @@ describe("password flow", () => {
       .toBe("tg://resolve?domain=abihsgelo");
   });
 
-  it("tries telegram app first and only falls back to web after timeout", async () => {
+  it("tries telegram app first and falls back to web in a new tab after timeout", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
 
@@ -146,16 +146,16 @@ describe("password flow", () => {
     await app.start();
 
     const dispatchSpy = vi.spyOn(app as any, "dispatchTelegramDeepLink").mockImplementation(() => undefined);
-    const navigateSpy = vi.spyOn(app as any, "navigateToUrl").mockImplementation(() => undefined);
+    const openTabSpy = vi.spyOn(app as any, "openUrlInNewTab").mockImplementation(() => undefined);
 
     (app as any).openTelegramChannel("https://t.me/abihsgelo");
 
     expect(dispatchSpy).toHaveBeenCalledWith("tg://resolve?domain=abihsgelo");
-    expect(navigateSpy).not.toHaveBeenCalled();
+    expect(openTabSpy).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(800);
 
-    expect(navigateSpy).toHaveBeenCalledWith("https://t.me/abihsgelo");
+    expect(openTabSpy).toHaveBeenCalledWith("https://t.me/abihsgelo");
   });
 
   it("does not fall back to telegram website if the page becomes hidden after deep link attempt", async () => {
@@ -189,14 +189,14 @@ describe("password flow", () => {
     const app = new AppController(document.querySelector("#app") as HTMLDivElement);
     await app.start();
 
-    const navigateSpy = vi.spyOn(app as any, "navigateToUrl").mockImplementation(() => undefined);
+    const openTabSpy = vi.spyOn(app as any, "openUrlInNewTab").mockImplementation(() => undefined);
     (app as any).openTelegramChannel("https://t.me/abihsgelo");
 
     visibility = "hidden";
     document.dispatchEvent(new Event("visibilitychange"));
     await vi.advanceTimersByTimeAsync(800);
 
-    expect(navigateSpy).not.toHaveBeenCalled();
+    expect(openTabSpy).not.toHaveBeenCalled();
   });
 
   it("submits on mobile insertLineBreak action", async () => {
@@ -489,6 +489,68 @@ describe("password flow", () => {
     expect(document.querySelector(".admin-shell")).toBeFalsy();
   });
 
+  it("renders compact admin structure with access open by default", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith("/snapshot.json")) {
+        return new Response(JSON.stringify({ fresh: [], archive: [] }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && (!init?.method || init.method === "GET")) {
+        return new Response(JSON.stringify(bootstrapPayload), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/auth/enter")) {
+        return new Response(JSON.stringify({ ok: true, mode: "admin_mode", token: "token-admin-layout" }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/admin/bootstrap")) {
+        return new Response(JSON.stringify({
+          mode: "admin_mode",
+          modes: [
+            { id: "home_mode", label: "Home", accessState: "public", isEnabled: true, isDefaultPublic: true },
+            { id: "proxies_mode", label: "Proxies", accessState: "locked", isEnabled: true, isDefaultPublic: false },
+            { id: "admin_mode", label: "Admin", accessState: "locked", isEnabled: true, isDefaultPublic: false }
+          ],
+          wallets: [],
+          accessRules: [],
+          settings: { "donate.visible": true },
+          health: { worker: "ok", bootstrapMessage: "admin bootstrap ready" },
+          audit: []
+        }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = new AppController(document.querySelector("#app") as HTMLDivElement);
+    await app.start();
+    (document.querySelector(".home-shell") as HTMLElement).click();
+    await vi.advanceTimersByTimeAsync(280);
+
+    const input = document.querySelector(".password-hidden-input") as HTMLTextAreaElement;
+    input.value = "olegadmin";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(260);
+    await Promise.resolve();
+
+    const sections = [...document.querySelectorAll(".admin-section")] as HTMLDetailsElement[];
+    expect(sections).toHaveLength(4);
+    expect(sections[0].open).toBe(true);
+    expect(sections[1].open).toBe(false);
+    expect(sections[2].open).toBe(false);
+    expect(sections[3].open).toBe(false);
+  });
+
   it("returns from proxies panel to home via close button without reload", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -610,5 +672,101 @@ describe("password flow", () => {
     expect(document.querySelector(".proxies-shell")).toBeTruthy();
     expect(document.querySelectorAll(".proxy-card").length).toBe(2);
     expect(document.querySelector(".proxies-empty")).toBeFalsy();
+  });
+
+  it("submits full wallet editing payload from admin", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.endsWith("/snapshot.json")) {
+        return new Response(JSON.stringify({ fresh: [], archive: [] }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && (!init?.method || init.method === "GET")) {
+        return new Response(JSON.stringify(bootstrapPayload), { status: 200 });
+      }
+
+      if (url.endsWith("/api/bootstrap") && init?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/auth/enter")) {
+        return new Response(JSON.stringify({ ok: true, mode: "admin_mode", token: "token-wallets" }), { status: 200 });
+      }
+
+      if (url.endsWith("/api/admin/bootstrap")) {
+        return new Response(JSON.stringify({
+          mode: "admin_mode",
+          modes: [],
+          wallets: [
+            {
+              id: "ton",
+              network: "ton",
+              title: "usdt ton",
+              address: "old-address",
+              qrPayload: "old-qr",
+              warningText: "old-warning",
+              isEnabled: true,
+              sortOrder: 1
+            }
+          ],
+          accessRules: [],
+          settings: { "donate.visible": true },
+          health: { worker: "ok", bootstrapMessage: "admin bootstrap ready" },
+          audit: []
+        }), { status: 200 });
+      }
+
+      if (url.includes("/api/admin/wallets/ton")) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const app = new AppController(document.querySelector("#app") as HTMLDivElement);
+    await app.start();
+    (document.querySelector(".home-shell") as HTMLElement).click();
+    await vi.advanceTimersByTimeAsync(280);
+
+    const input = document.querySelector(".password-hidden-input") as HTMLTextAreaElement;
+    input.value = "olegadmin";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(260);
+    await Promise.resolve();
+
+    const walletSection = document.querySelectorAll<HTMLDetailsElement>(".admin-section")[2];
+    walletSection.open = true;
+    walletSection.dispatchEvent(new Event("toggle"));
+    await Promise.resolve();
+
+    const forms = [...document.querySelectorAll("form")];
+    const walletForm = forms.find((form) => form.querySelector('input[name="qrPayload"]')) as HTMLFormElement;
+    expect(walletForm).toBeTruthy();
+
+    (walletForm.querySelector('input[name="title"]') as HTMLInputElement).value = "ton usdt";
+    (walletForm.querySelector('input[name="address"]') as HTMLInputElement).value = "new-address";
+    (walletForm.querySelector('input[name="qrPayload"]') as HTMLInputElement).value = "new-qr";
+    (walletForm.querySelector('input[name="warningText"]') as HTMLInputElement).value = "new-warning";
+    (walletForm.querySelector('input[name="sortOrder"]') as HTMLInputElement).value = "7";
+    (walletForm.querySelector('input[name="isEnabled"]') as HTMLInputElement).checked = false;
+    walletForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await Promise.resolve();
+
+    const walletCall = fetchMock.mock.calls.find(([request]) => String(request).includes("/api/admin/wallets/ton"));
+    expect(walletCall).toBeTruthy();
+    const body = JSON.parse(String((walletCall?.[1] as RequestInit).body));
+    expect(body).toEqual({
+      title: "ton usdt",
+      address: "new-address",
+      qrPayload: "new-qr",
+      warningText: "new-warning",
+      sortOrder: 7,
+      isEnabled: false
+    });
   });
 });

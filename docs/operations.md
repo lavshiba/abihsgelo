@@ -58,8 +58,10 @@ When validating a release, verify both:
 - panel close controls return to home without reload for both `admin_mode` and `proxies_mode`
 - `tg` button attempts Telegram app deep-link before web fallback
 - `tg` should not briefly land on the Telegram website before app handoff on the normal path
+- if app handoff fails, Telegram web should open in a new tab while the current `abihsgelo` tab stays intact
 - `proxies_mode` should open already filled with ready cards when auth succeeds and live or snapshot data is available
-- hidden admin sections should stay compact on mobile, with only the primary control sections open by default
+- hidden admin should stay compact on mobile, with only the access block open by default
+- wallet editing from hidden admin should update address, QR payload, order, label, enable state, and donate visibility
 
 The implementation uses an invisible focused text control behind the typographic monolith, so regressions usually show up as keyboard-submit failures rather than visual breakage.
 

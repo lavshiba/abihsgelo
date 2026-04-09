@@ -55,8 +55,9 @@ Only push or deploy after all five pass.
 - Hidden password entry is a typographic monolith only. No visible input box, labels, submit buttons, or back buttons.
 - Protected panels should provide an in-app close path back to `home_mode` without full page reload.
 - Telegram CTA behavior should prefer direct app deep-link handoff before web fallback.
+- Telegram web fallback must not replace the current site tab on the normal path; prefer opening fallback in a new tab while keeping `abihsgelo` in place.
 - Protected mode panels should open with ready content as often as available data allows; avoid normal-path blank or confusing loading gaps after successful password entry.
-- Hidden admin should stay compact and sectioned on both desktop and mobile, not one always-open raw form scroll.
+- Hidden admin should stay compact and sectioned on both desktop and mobile, with only the primary access block open by default.
 - All mode/public-lock behavior must be data-driven through D1, not hardcoded special cases.
 - Hidden admin changes passwords, mode visibility, wallets, donate block, and refresh/lock operations without code edits.
 - Snapshot fallback must never reveal protected content or admin logic.

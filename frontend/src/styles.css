@@ -220,7 +220,7 @@ a {
   height: 100%;
   display: grid;
   place-items: center;
-  padding: 1.6vh 1.9vw;
+  padding: 0.8vh 1vw;
 }
 
 .password-visual-layer {
@@ -259,13 +259,13 @@ a {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  justify-content: space-evenly;
-  gap: clamp(0.01rem, 0.18vw, 0.08rem);
+  justify-content: space-between;
+  gap: 0;
   font-family: "Space Grotesk", "Manrope", sans-serif;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: -0.12em;
-  line-height: 0.72;
+  line-height: 0.64;
   text-shadow: 0 0 0.03em rgba(255, 255, 255, 0.4);
   transition: opacity 220ms ease, filter 220ms ease, transform 220ms ease;
   animation: monolith-arrive 260ms ease both;
@@ -321,27 +321,27 @@ a {
 }
 
 .password-monolith[data-size="single"] {
-  font-size: min(95vw, 95vh);
+  font-size: min(99vw, 99vh);
 }
 
 .password-monolith[data-size="double"] {
-  font-size: min(49vw, 88vh);
+  font-size: min(52vw, 92vh);
 }
 
 .password-monolith[data-size="giant"] {
-  font-size: min(33vw, 36vh);
+  font-size: min(38vw, 40vh);
 }
 
 .password-monolith[data-size="dense"] {
-  font-size: min(24vw, 25vh);
+  font-size: min(27vw, 28vh);
 }
 
 .password-monolith[data-size="compact"] {
-  font-size: min(18vw, 18.5vh);
+  font-size: min(20vw, 20.5vh);
 }
 
 .password-monolith[data-size="packed"] {
-  font-size: min(13vw, 13.8vh);
+  font-size: min(14.8vw, 14.6vh);
 }
 
 .cursor-shell {
@@ -909,7 +909,26 @@ a {
 
 .admin-topbar-copy {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+}
+
+.admin-top-status {
+  width: min(92vw, 960px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-top-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-soft);
+  font-size: 0.8rem;
 }
 
 .admin-notice {
@@ -1036,7 +1055,8 @@ a {
 }
 
 .admin-overview-grid,
-.admin-guide-grid {
+.admin-guide-grid,
+.admin-service-summary {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -1088,6 +1108,11 @@ a {
 .admin-helper {
   display: grid;
   gap: 8px;
+}
+
+.admin-actions-panel {
+  display: grid;
+  gap: 10px;
 }
 
 .admin-guide-card h3,
@@ -1172,6 +1197,15 @@ a {
 .admin-inset-card {
   display: grid;
   gap: 12px;
+}
+
+.admin-section-inline > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.admin-section-inline > summary::-webkit-details-marker {
+  display: none;
 }
 
 .admin-form-heading {

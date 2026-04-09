@@ -212,14 +212,16 @@ Current admin UX principles:
 - fast first paint after successful password entry, with admin shell visible before payload fetch completes
 - panel close buttons return protected panels back to home without reload
 - quick proxy password creation as the shortest path after first bootstrap login
-- hidden admin is organized as compact collapsible sections, with overview, quick actions, and access open by default
+- hidden admin is organized as four compact collapsible blocks: access, quick actions, wallets, and service
+- only access stays open by default; the rest stay collapsed until needed
 - active, disabled, and archived access rules separated into clearer groups
 - save actions show short success or error feedback instead of silently re-rendering
 - browser admin payload excludes password hash internals
+- wallets can be fully edited from hidden admin: label, address, QR payload, order, enable state, and donate visibility
 
 Current panel UX principles:
 - successful password entry opens the target panel quickly on both desktop and mobile
-- `tg` tries a direct Telegram app handoff first and only falls back to web if the page stayed visible
+- `tg` tries a direct Telegram app handoff first and only falls back to web in a new tab if the page stayed visible
 - password monolith stays heavy, dense, and poster-like instead of a centered neat text block
 - `proxies_mode` opens with ready data when live or snapshot payload is already available
 - proxies mode is arranged as a tighter centered panel with smoother archive reveal
