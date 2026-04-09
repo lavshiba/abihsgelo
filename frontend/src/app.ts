@@ -54,6 +54,7 @@ export class AppController {
   private passwordCompositionActive = false;
   private passwordFocusHandles: number[] = [];
   private passwordSubmitPending = false;
+  private passwordGlobalKeyHandler: ((event: KeyboardEvent) => void) | null = null;
   private transitionHandles: number[] = [];
   private walletOverlay: WalletEntry | null = null;
   private copiedWalletId: string | null = null;
@@ -74,6 +75,7 @@ export class AppController {
   public async start(): Promise<void> {
     this.snapshot = await this.loadSnapshot();
     this.bootstrap = await this.fetchJson<BootstrapPayload>(this.apiUrl("/api/bootstrap")).catch(() => FALLBACK_BOOTSTRAP);
+    this.installPasswordGlobalHandlers();
     void this.track("site_open");
     this.render();
   }
@@ -270,6 +272,7 @@ export class AppController {
 
       if (event.key === "Enter") {
         event.preventDefault();
+        this.syncPasswordBufferFromInput(false);
         this.tryPasswordSubmit();
         return;
       }
@@ -285,6 +288,7 @@ export class AppController {
 
       if (inputEvent.inputType === "insertLineBreak") {
         event.preventDefault();
+        this.syncPasswordBufferFromInput(false);
         this.tryPasswordSubmit();
       }
     });
@@ -1261,11 +1265,39 @@ export class AppController {
   }
 
   private tryPasswordSubmit(): void {
+    this.syncPasswordBufferFromInput(false);
     if (!this.passwordBuffer.trim() || this.passwordCompositionActive || this.passwordSubmitPending) {
       return;
     }
 
     void this.submitPassword();
+  }
+
+  private installPasswordGlobalHandlers(): void {
+    if (this.passwordGlobalKeyHandler) {
+      return;
+    }
+
+    this.passwordGlobalKeyHandler = (event: KeyboardEvent) => {
+      if (this.scene !== "password" || event.defaultPrevented || event.isComposing || this.passwordCompositionActive) {
+        return;
+      }
+
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement || active instanceof HTMLSelectElement || active instanceof HTMLButtonElement) {
+        return;
+      }
+
+      event.preventDefault();
+      this.syncPasswordBufferFromInput(false);
+      this.tryPasswordSubmit();
+    };
+
+    window.addEventListener("keydown", this.passwordGlobalKeyHandler, true);
   }
 
   private modeLabel(modeId: string): string {
