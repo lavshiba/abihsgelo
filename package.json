@@ -22,7 +22,7 @@
     "bootstrap:check": "node scripts/bootstrap-check.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "npm run build:shared && vitest run",
     "db:migrate": "npx wrangler d1 migrations apply DB --config worker/wrangler.toml --local",
     "db:seed": "npx wrangler d1 execute DB --config worker/wrangler.toml --local --file worker/migrations/0002_seed.sql",
     "deploy": "npm run lint && npm run typecheck && npm run test && npm run build && npx wrangler deploy --config worker/wrangler.toml",
