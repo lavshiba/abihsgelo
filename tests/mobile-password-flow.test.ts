@@ -189,6 +189,7 @@ describe("password flow", () => {
     const app = new AppController(document.querySelector("#app") as HTMLDivElement);
     await app.start();
 
+    vi.spyOn(app as any, "dispatchTelegramDeepLink").mockImplementation(() => undefined);
     const openTabSpy = vi.spyOn(app as any, "openUrlInNewTab").mockImplementation(() => undefined);
     (app as any).openTelegramChannel("https://t.me/abihsgelo");
 

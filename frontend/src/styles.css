@@ -220,7 +220,7 @@ a {
   height: 100%;
   display: grid;
   place-items: center;
-  padding: 0.8vh 1vw;
+  padding: 0;
 }
 
 .password-visual-layer {
@@ -264,8 +264,8 @@ a {
   font-family: "Space Grotesk", "Manrope", sans-serif;
   font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: -0.12em;
-  line-height: 0.64;
+  letter-spacing: -0.145em;
+  line-height: 0.56;
   text-shadow: 0 0 0.03em rgba(255, 255, 255, 0.4);
   transition: opacity 220ms ease, filter 220ms ease, transform 220ms ease;
   animation: monolith-arrive 260ms ease both;
@@ -307,7 +307,7 @@ a {
   width: 100%;
   align-items: center;
   justify-content: center;
-  gap: 0.01em;
+  gap: 0;
   animation: password-row-settle 220ms ease both;
 }
 
@@ -317,31 +317,31 @@ a {
 }
 
 .glyph-space {
-  min-width: 0.58em;
+  min-width: 0.48em;
 }
 
 .password-monolith[data-size="single"] {
-  font-size: min(99vw, 99vh);
+  font-size: min(106vw, 106vh);
 }
 
 .password-monolith[data-size="double"] {
-  font-size: min(52vw, 92vh);
+  font-size: min(56vw, 100vh);
 }
 
 .password-monolith[data-size="giant"] {
-  font-size: min(38vw, 40vh);
+  font-size: min(43vw, 46vh);
 }
 
 .password-monolith[data-size="dense"] {
-  font-size: min(27vw, 28vh);
+  font-size: min(31vw, 31vh);
 }
 
 .password-monolith[data-size="compact"] {
-  font-size: min(20vw, 20.5vh);
+  font-size: min(23vw, 22vh);
 }
 
 .password-monolith[data-size="packed"] {
-  font-size: min(14.8vw, 14.6vh);
+  font-size: min(16.6vw, 16vh);
 }
 
 .cursor-shell {

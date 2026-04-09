@@ -30,13 +30,6 @@ interface AdminNotice {
   text: string;
 }
 
-interface ModeOpenPrep {
-  proxiesPayload: ProxiesPayload | null;
-  proxiesDeferred: Promise<void> | null;
-  adminPayload: AdminPayload | null;
-  adminDeferred: Promise<void> | null;
-}
-
 const FALLBACK_BOOTSTRAP: BootstrapPayload = {
   siteName: "abihsgelo",
   defaultPublicMode: "home_mode",
@@ -637,8 +630,6 @@ export class AppController {
         return;
       }
 
-      const prep = await this.prepareModeOpen(result.mode, result.token);
-
       this.clearPasswordFlow();
       this.passwordVisualState = "success";
       this.syncPasswordSceneVisuals();
@@ -653,89 +644,29 @@ export class AppController {
         if (result.mode === "proxies_mode") {
           this.archiveOpen = false;
           this.pendingScrollTarget = "fresh";
-          this.currentProxiesPayload = prep.proxiesPayload;
-          this.proxiesLoadState = prep.proxiesPayload ? "ready" : "loading";
+          const fallback = this.buildProxyFallbackPayload();
+          this.currentProxiesPayload = fallback.fresh.length > 0 || fallback.archive.length > 0 ? fallback : null;
+          this.proxiesLoadState = this.currentProxiesPayload ? "ready" : "loading";
+          this.proxiesLoading = false;
         }
         if (result.mode === "admin_mode") {
           this.adminError = null;
-          this.adminPayload = prep.adminPayload;
-          this.adminLoading = prep.adminDeferred !== null;
+          this.adminPayload = null;
+          this.adminLoading = false;
         }
         this.render();
-        void prep.proxiesDeferred;
-        void prep.adminDeferred;
-      }, 80);
+        if (result.mode === "proxies_mode") {
+          void this.ensureProxiesPayload(true);
+        }
+        if (result.mode === "admin_mode") {
+          void this.ensureAdminPayload(true);
+        }
+      }, 36);
     } catch {
       window.clearTimeout(requestTimeout);
       this.passwordSubmitPending = false;
       this.leavePasswordScene("timeout");
     }
-  }
-
-  private async prepareModeOpen(mode: string, token: string): Promise<ModeOpenPrep> {
-    const prep: ModeOpenPrep = {
-      proxiesPayload: null,
-      proxiesDeferred: null,
-      adminPayload: null,
-      adminDeferred: null
-    };
-
-    if (mode === "proxies_mode") {
-      const preload = this.fetchProxiesPayload(token);
-      const timed = await Promise.race([
-        preload.then((payload) => ({ kind: "payload" as const, payload })).catch(() => ({ kind: "error" as const })),
-        this.delay(210).then(() => ({ kind: "timeout" as const }))
-      ]);
-
-      if (timed.kind === "payload") {
-        prep.proxiesPayload = timed.payload;
-      } else {
-        const fallback = this.buildProxyFallbackPayload();
-        prep.proxiesPayload = fallback.fresh.length > 0 || fallback.archive.length > 0 ? fallback : null;
-        prep.proxiesDeferred = preload
-          .then((payload) => {
-            this.proxiesLoadState = "ready";
-            this.applyFetchedProxies(payload);
-          })
-          .catch(() => {
-            if (!this.currentProxiesPayload) {
-              this.proxiesLoadState = "error";
-              this.applyFetchedProxies(this.buildProxyFallbackPayload());
-            }
-          });
-      }
-    }
-
-    if (mode === "admin_mode") {
-      const preload = this.fetchAdminPayload(token);
-      const timed = await Promise.race([
-        preload.then((payload) => ({ kind: "payload" as const, payload })).catch(() => ({ kind: "error" as const })),
-        this.delay(180).then(() => ({ kind: "timeout" as const }))
-      ]);
-
-      if (timed.kind === "payload") {
-        prep.adminPayload = timed.payload;
-      } else {
-        prep.adminDeferred = preload
-          .then((payload) => {
-            this.adminPayload = payload;
-            this.adminLoading = false;
-            this.adminError = null;
-            if (this.scene === "mode" && this.session.mode === "admin_mode") {
-              this.render();
-            }
-          })
-          .catch(() => {
-            this.adminError = "load_failed";
-            this.adminLoading = false;
-            if (this.scene === "mode" && this.session.mode === "admin_mode") {
-              this.render();
-            }
-          });
-      }
-    }
-
-    return prep;
   }
 
   private renderProxiesScene(): HTMLElement {
@@ -1070,15 +1001,15 @@ export class AppController {
   }
 
   private dispatchTelegramDeepLink(deepLink: string): void {
-    const bridge = document.createElement("iframe");
-    bridge.className = "telegram-bridge";
-    bridge.setAttribute("aria-hidden", "true");
-    bridge.tabIndex = -1;
-    bridge.src = deepLink;
-    document.body.append(bridge);
+    const anchor = document.createElement("a");
+    anchor.href = deepLink;
+    anchor.rel = "noopener noreferrer";
+    anchor.className = "telegram-bridge-link";
+    document.body.append(anchor);
+    anchor.click();
     window.setTimeout(() => {
-      bridge.remove();
-    }, 900);
+      anchor.remove();
+    }, 500);
   }
 
   private navigateToUrl(url: string): void {
@@ -1955,12 +1886,6 @@ export class AppController {
   private async fetchAdminPayload(token = this.session.token ?? ""): Promise<AdminPayload> {
     return this.fetchJson<AdminPayload>(this.apiUrl("/api/admin/bootstrap"), {
       headers: this.authHeaders(token)
-    });
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => {
-      window.setTimeout(resolve, ms);
     });
   }
 
