@@ -1,6 +1,9 @@
 import type { AccessRuleSummary, BootstrapPayload, ModeSummary, ProxyItem, WalletEntry } from "@abihsgelo/shared";
 import { buildProxyTitle } from "@abihsgelo/shared";
 
+const FRESH_PROXY_LIMIT = 9;
+const ARCHIVE_PROXY_LIMIT = 100;
+
 export interface Env {
   DB: D1Database;
   ANALYTICS: AnalyticsEngineDataset;
@@ -131,13 +134,13 @@ export async function getProxyPayload(env: Env): Promise<{
 }> {
   const fresh = (await env.DB.prepare(
     `SELECT id, proxy_number AS proxyNumber, proxy_url AS proxyUrl, posted_at AS postedAt, source_message_id AS sourceMessageId, click_count AS clickCount
-     FROM proxy_items_fresh ORDER BY proxy_number DESC LIMIT 9`
-  ).all<ProxyItem>()).results;
+     FROM proxy_items_fresh ORDER BY proxy_number DESC LIMIT ?1`
+  ).bind(FRESH_PROXY_LIMIT).all<ProxyItem>()).results;
 
   const archive = (await env.DB.prepare(
     `SELECT id, proxy_number AS proxyNumber, proxy_url AS proxyUrl, posted_at AS postedAt, source_message_id AS sourceMessageId, click_count AS clickCount
-     FROM proxy_items_archive ORDER BY proxy_number DESC LIMIT 120`
-  ).all<ProxyItem>()).results;
+     FROM proxy_items_archive ORDER BY proxy_number DESC LIMIT ?1`
+  ).bind(ARCHIVE_PROXY_LIMIT).all<ProxyItem>()).results;
 
   const state = await env.DB.prepare(
     `SELECT last_live_refresh_at, last_refresh_status, stale_reason FROM proxy_state WHERE id = 1`

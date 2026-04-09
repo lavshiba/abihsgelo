@@ -37,7 +37,7 @@ export async function refreshProxyState(env: Env): Promise<void> {
 
     const numbered = assignStableProxyNumbers(items, existingCatalog);
     const fresh = numbered.items.slice(0, 9);
-    const archive = numbered.items.slice(9, 129);
+    const archive = numbered.items.slice(9, 109);
     const knownSourceIds = new Set(existingCatalog.map((entry) => entry.sourceMessageId));
     const catalogStatements = numbered.catalog
       .filter((entry) => !knownSourceIds.has(entry.sourceMessageId))

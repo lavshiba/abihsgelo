@@ -41,7 +41,7 @@ if (parsed.length === 0) {
   const numbered = assignStableProxyNumbers(parsed, catalog);
   catalog = numbered.catalog;
   fresh = numbered.items.slice(0, 9);
-  archive = numbered.items.slice(9, 129);
+  archive = numbered.items.slice(9, 109);
 }
 
 const payload = {
