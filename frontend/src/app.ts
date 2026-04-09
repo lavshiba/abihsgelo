@@ -54,7 +54,7 @@ export class AppController {
   private passwordCompositionActive = false;
   private passwordFocusHandles: number[] = [];
   private passwordSubmitPending = false;
-  private passwordGlobalKeyHandler: ((event: KeyboardEvent) => void) | null = null;
+  private passwordGlobalKeyHandler: EventListener | null = null;
   private transitionHandles: number[] = [];
   private walletOverlay: WalletEntry | null = null;
   private copiedWalletId: string | null = null;
