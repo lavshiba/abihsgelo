@@ -749,43 +749,54 @@ export class AppController {
 
     const shell = document.createElement("main");
     shell.className = "admin-shell";
+    shell.innerHTML = `
+      <section class="admin-intro">
+        <p class="admin-kicker">hidden admin</p>
+        <h1>Панель управления</h1>
+        <p class="admin-intro-copy">Здесь вы управляете доступом, режимами, кошельками и оперативными действиями без правки кода.</p>
+      </section>
+    `;
     shell.append(
-      this.sectionCard("health", this.renderHealth(payload)),
-      this.sectionCard("settings", this.renderSettings(payload.settings)),
-      this.sectionCard("modes", this.renderModes(payload.modes)),
-      this.sectionCard("access rules", this.renderAccessRules(payload.accessRules)),
-      this.sectionCard("wallets", this.renderWallets(payload.wallets)),
-      this.sectionCard("exports", this.renderExports()),
-      this.sectionCard("audit", this.renderAudit(payload.audit))
+      this.sectionCard("Состояние", "Живой статус воркера, D1 и bootstrap-доступа.", this.renderHealth(payload)),
+      this.sectionCard("Настройки", "Глобальные переключатели публичной сцены и emergency-режима.", this.renderSettings(payload.settings)),
+      this.sectionCard("Режимы", "Какие режимы открыты, заблокированы и какой режим публичный по умолчанию.", this.renderModes(payload.modes)),
+      this.sectionCard("Пароли и доступы", "Создание, архивирование и переназначение правил доступа для режимов.", this.renderAccessRules(payload.accessRules)),
+      this.sectionCard("Кошельки", "Управление donate-блоком и адресами для сетей.", this.renderWallets(payload.wallets)),
+      this.sectionCard("Экспорт и импорт", "Резервные выгрузки и ручное восстановление служебных данных.", this.renderExports()),
+      this.sectionCard("Журнал", "Последние события авторизации и административных действий.", this.renderAudit(payload.audit))
     );
     this.root.append(shell);
   }
 
-  private sectionCard(title: string, content: HTMLElement): HTMLElement {
+  private sectionCard(title: string, description: string, content: HTMLElement): HTMLElement {
     const card = document.createElement("section");
     card.className = "admin-card";
-    const heading = document.createElement("h2");
-    heading.textContent = title;
-    card.append(heading, content);
+    card.innerHTML = `
+      <div class="admin-card-header">
+        <h2>${title}</h2>
+        <p>${description}</p>
+      </div>
+    `;
+    card.append(content);
     return card;
   }
 
   private renderHealth(payload: AdminPayload): HTMLElement {
     const wrap = document.createElement("div");
-    wrap.className = "admin-list";
+    wrap.className = "admin-list admin-health-list";
     wrap.innerHTML = Object.entries(payload.health)
-      .map(([key, value]) => `<p><span>${key}</span><strong>${String(value)}</strong></p>`)
+      .map(([key, value]) => `<p><span>${this.healthLabel(key)}</span><strong>${this.healthValue(value)}</strong></p>`)
       .join("");
 
     const actions = document.createElement("div");
     actions.className = "admin-actions";
 
     const refresh = document.createElement("button");
-    refresh.textContent = "refresh now";
+    refresh.textContent = "Обновить прокси сейчас";
     refresh.addEventListener("click", () => void this.adminAction("/api/admin/refresh-now"));
 
     const lock = document.createElement("button");
-    lock.textContent = "lock now";
+    lock.textContent = "Мгновенно заблокировать";
     lock.className = "danger";
     lock.addEventListener("click", () => void this.adminAction("/api/admin/lock-now"));
 
@@ -802,20 +813,20 @@ export class AppController {
       const row = document.createElement("form");
       row.className = "admin-form-row";
       row.innerHTML = `
-        <strong>${mode.id}</strong>
-        <label>state
+        <strong>${this.modeLabel(mode.id)}</strong>
+        <label>Доступ
           <select name="accessState">
-            <option value="public" ${mode.accessState === "public" ? "selected" : ""}>public</option>
-            <option value="locked" ${mode.accessState === "locked" ? "selected" : ""}>locked</option>
+            <option value="public" ${mode.accessState === "public" ? "selected" : ""}>публичный</option>
+            <option value="locked" ${mode.accessState === "locked" ? "selected" : ""}>закрытый</option>
           </select>
         </label>
-        <label>enabled
+        <label>Включен
           <input name="isEnabled" type="checkbox" ${mode.isEnabled ? "checked" : ""} />
         </label>
-        <label>default
+        <label>Публичный по умолчанию
           <input name="isDefaultPublic" type="checkbox" ${mode.isDefaultPublic ? "checked" : ""} />
         </label>
-        <button type="submit">save</button>
+        <button type="submit">Сохранить режим</button>
       `;
       row.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -840,13 +851,13 @@ export class AppController {
     const form = document.createElement("form");
     form.className = "admin-form-row";
     form.innerHTML = `
-      <label>donate visible
+      <label>Показывать donate-блок
         <input name="donate.visible" type="checkbox" ${settings["donate.visible"] ? "checked" : ""} />
       </label>
-      <label>panic mode
+      <label>Режим тревоги
         <input name="panic_mode" type="checkbox" ${settings["panic_mode"] ? "checked" : ""} />
       </label>
-      <button type="submit">save</button>
+      <button type="submit">Сохранить настройки</button>
     `;
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -871,40 +882,40 @@ export class AppController {
       const row = document.createElement("form");
       row.className = "admin-form-row";
       row.innerHTML = `
-        <strong>${rule.label}${rule.softDeletedAt ? " [archived]" : ""}</strong>
-        <label>mode
-          <input name="targetMode" value="${rule.targetMode}" />
+        <strong>${this.escapeHtml(rule.label)}${rule.softDeletedAt ? " [в архиве]" : ""}</strong>
+        <label>Режим
+          <input name="targetMode" value="${this.escapeHtml(rule.targetMode)}" />
         </label>
-        <label>label
+        <label>Название правила
           <input name="label" value="${this.escapeHtml(rule.label)}" />
         </label>
-        <label>priority
+        <label>Приоритет
           <input name="priority" type="number" value="${rule.priority}" />
         </label>
-        <label>enabled
+        <label>Включено
           <input name="isEnabled" type="checkbox" ${rule.isEnabled ? "checked" : ""} ${rule.softDeletedAt ? "disabled" : ""} />
         </label>
-        <label>archived
+        <label>Архив
           <input name="softDelete" type="checkbox" ${rule.softDeletedAt ? "checked" : ""} />
         </label>
-        <label>password
-          <input name="password" type="text" placeholder="leave empty to keep" />
+        <label>Новый пароль
+          <input name="password" type="text" placeholder="оставьте пустым, чтобы не менять" />
         </label>
-        <label>notes
+        <label>Заметки
           <input name="notes" value="${this.escapeHtml(rule.notes ?? "")}" />
         </label>
-        <label>expires at
+        <label>Истекает
           <input name="expiresAt" type="datetime-local" value="${this.toDatetimeLocalValue(rule.expiresAt)}" />
         </label>
-        <label>max uses
+        <label>Максимум использований
           <input name="maxUses" type="number" min="1" value="${rule.maxUses ?? ""}" />
         </label>
-        <label>first use only
+        <label>Только одно успешное использование
           <input name="firstUseOnly" type="checkbox" ${rule.firstUseOnly ? "checked" : ""} />
         </label>
-        <p class="admin-rule-meta">usage ${rule.usageCount} | success ${rule.successCount} | fail ${rule.failCount}</p>
-        <p class="admin-rule-meta">last used ${rule.lastUsedAt ? this.formatTimestamp(rule.lastUsedAt) : "never"}</p>
-        <button type="submit">save</button>
+        <p class="admin-rule-meta">Использований: ${rule.usageCount} | Успехов: ${rule.successCount} | Ошибок: ${rule.failCount}</p>
+        <p class="admin-rule-meta">Последнее использование: ${rule.lastUsedAt ? this.formatTimestamp(rule.lastUsedAt) : "никогда"}</p>
+        <button type="submit">Сохранить правило</button>
       `;
       row.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -932,16 +943,16 @@ export class AppController {
     const add = document.createElement("form");
     add.className = "admin-form-row";
     add.innerHTML = `
-      <strong>new rule</strong>
-      <label>label <input name="label" required /></label>
-      <label>mode <input name="targetMode" required /></label>
-      <label>priority <input name="priority" type="number" value="100" /></label>
-      <label>password <input name="password" required /></label>
-      <label>notes <input name="notes" /></label>
-      <label>expires at <input name="expiresAt" type="datetime-local" /></label>
-      <label>max uses <input name="maxUses" type="number" min="1" /></label>
-      <label>first use only <input name="firstUseOnly" type="checkbox" /></label>
-      <button type="submit">add</button>
+      <strong>Новое правило доступа</strong>
+      <label>Название <input name="label" required /></label>
+      <label>Режим <input name="targetMode" required /></label>
+      <label>Приоритет <input name="priority" type="number" value="100" /></label>
+      <label>Пароль <input name="password" required /></label>
+      <label>Заметки <input name="notes" /></label>
+      <label>Истекает <input name="expiresAt" type="datetime-local" /></label>
+      <label>Максимум использований <input name="maxUses" type="number" min="1" /></label>
+      <label>Только одно успешное использование <input name="firstUseOnly" type="checkbox" /></label>
+      <button type="submit">Создать правило</button>
     `;
     add.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -974,11 +985,11 @@ export class AppController {
       const row = document.createElement("form");
       row.className = "admin-form-row";
       row.innerHTML = `
-        <strong>${wallet.network}</strong>
-        <label>address <input name="address" value="${wallet.address}" /></label>
-        <label>warning <input name="warningText" value="${wallet.warningText}" /></label>
-        <label>enabled <input name="isEnabled" type="checkbox" ${wallet.isEnabled ? "checked" : ""} /></label>
-        <button type="submit">save</button>
+        <strong>${wallet.network.toUpperCase()}</strong>
+        <label>Адрес <input name="address" value="${this.escapeHtml(wallet.address)}" /></label>
+        <label>Предупреждение <input name="warningText" value="${this.escapeHtml(wallet.warningText)}" /></label>
+        <label>Включено <input name="isEnabled" type="checkbox" ${wallet.isEnabled ? "checked" : ""} /></label>
+        <button type="submit">Сохранить кошелек</button>
       `;
       row.addEventListener("submit", (event) => {
         event.preventDefault();
@@ -1005,7 +1016,7 @@ export class AppController {
     for (const kind of ["access_rules", "wallets", "site_settings"]) {
       const anchor = document.createElement("a");
       anchor.href = this.apiUrl(`/api/admin/export?kind=${kind}`);
-      anchor.textContent = `export ${kind}`;
+      anchor.textContent = this.exportLabel(kind);
       anchor.className = "export-link";
       anchor.addEventListener("click", (event) => {
         event.preventDefault();
@@ -1029,13 +1040,13 @@ export class AppController {
     input.accept = "application/json";
     const select = document.createElement("select");
     select.innerHTML = `
-      <option value="access_rules">access_rules</option>
-      <option value="wallets">wallets</option>
-      <option value="site_settings">site_settings</option>
+      <option value="access_rules">Правила доступа</option>
+      <option value="wallets">Кошельки</option>
+      <option value="site_settings">Настройки сайта</option>
     `;
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = "import selected json";
+    button.textContent = "Импортировать выбранный JSON";
     button.addEventListener("click", async () => {
       const file = input.files?.[0];
       if (!file) {
@@ -1057,7 +1068,7 @@ export class AppController {
     const wrap = document.createElement("div");
     wrap.className = "admin-list";
     wrap.innerHTML = audit
-      .map((entry) => `<p><span>${entry.eventType}</span><strong>${this.formatTimestamp(entry.createdAt)}</strong></p>`)
+      .map((entry) => `<p><span>${this.auditEventLabel(entry.eventType)}</span><strong>${this.formatTimestamp(entry.createdAt)}</strong></p>`)
       .join("");
     return wrap;
   }
@@ -1255,5 +1266,72 @@ export class AppController {
     }
 
     void this.submitPassword();
+  }
+
+  private modeLabel(modeId: string): string {
+    const labels: Record<string, string> = {
+      home_mode: "Главная сцена",
+      proxies_mode: "Прокси",
+      admin_mode: "Админ-панель"
+    };
+    return labels[modeId] ?? modeId;
+  }
+
+  private exportLabel(kind: string): string {
+    const labels: Record<string, string> = {
+      access_rules: "Экспорт правил доступа",
+      wallets: "Экспорт кошельков",
+      site_settings: "Экспорт настроек сайта"
+    };
+    return labels[kind] ?? kind;
+  }
+
+  private healthLabel(key: string): string {
+    const labels: Record<string, string> = {
+      worker: "Worker",
+      d1: "D1",
+      analytics: "Analytics",
+      adminBootstrapConfigured: "Bootstrap secret настроен",
+      adminRulePresent: "Admin-правило существует",
+      bootstrapMessage: "Статус bootstrap",
+      last_live_refresh_at: "Последнее живое обновление",
+      last_snapshot_at: "Последний snapshot",
+      last_refresh_status: "Статус обновления",
+      stale_reason: "Причина stale",
+      session_version: "Версия сессий"
+    };
+    return labels[key] ?? key;
+  }
+
+  private healthValue(value: unknown): string {
+    if (typeof value === "boolean") {
+      return value ? "да" : "нет";
+    }
+    if (value === null) {
+      return "—";
+    }
+    return String(value);
+  }
+
+  private auditEventLabel(eventType: string): string {
+    const labels: Record<string, string> = {
+      password_success: "Успешный вход",
+      password_fail: "Ошибка пароля",
+      admin_change_access_rule: "Изменено правило доступа",
+      admin_change_mode: "Изменен режим",
+      wallet_update: "Изменен кошелек",
+      admin_import: "Импорт данных",
+      admin_lock_now: "Принудительная блокировка",
+      admin_bootstrap_rule_seeded: "Создан bootstrap admin rule",
+      site_open: "Открытие сайта",
+      home_tap_to_enter: "Переход к скрытому вводу",
+      tg_click: "Переход в Telegram",
+      wallet_open: "Открыт donate-кошелек",
+      wallet_copy: "Скопирован адрес кошелька",
+      proxy_click: "Открыт прокси",
+      archive_open: "Открыт архив прокси",
+      archive_close: "Закрыт архив прокси"
+    };
+    return labels[eventType] ?? eventType;
   }
 }

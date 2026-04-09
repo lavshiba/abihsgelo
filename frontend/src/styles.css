@@ -716,6 +716,38 @@ a {
   align-content: start;
 }
 
+.admin-intro {
+  width: min(92vw, 960px);
+  display: grid;
+  gap: 10px;
+  padding: 8px 6px 2px;
+}
+
+.admin-intro h1,
+.admin-intro p {
+  margin: 0;
+}
+
+.admin-kicker {
+  color: var(--text-quiet);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.74rem;
+}
+
+.admin-intro h1 {
+  font-size: clamp(1.45rem, 4vw, 2.2rem);
+  line-height: 1;
+  color: var(--text);
+}
+
+.admin-intro-copy {
+  max-width: 42rem;
+  color: var(--text-soft);
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+
 .admin-card {
   width: min(92vw, 960px);
   display: grid;
@@ -726,6 +758,20 @@ a {
     linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0));
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
   animation: section-arrive 260ms ease both;
+}
+
+.admin-card-header {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.admin-card-header p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.45;
+  max-width: 46rem;
 }
 
 .admin-actions {
@@ -747,6 +793,15 @@ a {
   padding: 10px 12px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.025);
+}
+
+.admin-list p span {
+  color: var(--text-soft);
+}
+
+.admin-list p strong {
+  color: var(--text);
+  text-align: right;
 }
 
 .admin-form-row {
@@ -779,6 +834,7 @@ a {
   color: var(--text-quiet);
   font-size: 0.82rem;
   align-self: center;
+  line-height: 1.4;
 }
 
 .admin-card h2 {
@@ -792,6 +848,7 @@ a {
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--text);
+  line-height: 1.35;
 }
 
 .admin-form-row input,
@@ -801,6 +858,58 @@ a {
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 10px 12px;
+  min-width: 0;
+}
+
+.admin-form-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: rgba(255, 255, 255, 0.8);
+  justify-self: start;
+}
+
+.admin-form-row button,
+.admin-actions button,
+.admin-actions .export-link {
+  min-height: 46px;
+}
+
+.admin-health-list {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+@media (max-width: 760px) {
+  .admin-shell {
+    padding: 28px 16px 64px;
+    gap: 18px;
+  }
+
+  .admin-intro {
+    width: min(94vw, 960px);
+    gap: 8px;
+    padding: 2px 2px 0;
+  }
+
+  .admin-card {
+    width: min(94vw, 960px);
+    padding: 20px 18px 18px;
+    gap: 16px;
+  }
+
+  .admin-form-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .admin-list p {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .admin-list p strong {
+    text-align: left;
+  }
 }
 
 .danger {
