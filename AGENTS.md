@@ -15,6 +15,7 @@ Read this file before touching code or docs.
 - `proxies_mode` and `admin_mode` are locked by default.
 - Never expose secrets, raw passwords, admin internals, or debug traces in the frontend.
 - Never store raw passwords anywhere. Use worker-side hashing with per-rule salt and a server-side pepper secret.
+- `ADMIN_BOOTSTRAP_PASSWORD` is mandatory for production until the first working `admin_mode` access rule exists in D1.
 - If exact naming or another hard requirement cannot be met, stop and report it instead of silently improvising.
 
 ## Sources Of Truth
@@ -31,6 +32,7 @@ Read this file before touching code or docs.
 - `home_mode`: public, non-scrolling, quiet personal scene.
 - `proxies_mode`: locked by password by default.
 - `admin_mode`: locked by password by default.
+- first production bootstrap must seed the first `admin_mode` access rule from `ADMIN_BOOTSTRAP_PASSWORD` if D1 has no admin rule yet
 
 ## Required Checks Before Push
 
@@ -48,6 +50,7 @@ Only push or deploy after all five pass.
 
 - Keep Pages and Worker operationally separate. Static shell must still load when Worker is unavailable.
 - Frontend auth state lives in memory only. No cookies, `localStorage`, or `sessionStorage` for session tokens.
+- Hidden password entry is a typographic monolith only. No visible input box, labels, submit buttons, or back buttons.
 - All mode/public-lock behavior must be data-driven through D1, not hardcoded special cases.
 - Hidden admin changes passwords, mode visibility, wallets, donate block, and refresh/lock operations without code edits.
 - Snapshot fallback must never reveal protected content or admin logic.

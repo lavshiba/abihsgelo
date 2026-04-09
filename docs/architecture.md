@@ -25,6 +25,12 @@ This temporary split exists because the account currently has no Cloudflare zone
 7. Frontend requests `/api/modes/:mode`.
 8. Worker authorizes mode access based on public-lock state, session token, and session version.
 
+Bootstrap safeguard:
+1. Worker receives `GET /api/bootstrap` or `POST /api/auth/enter`.
+2. Worker checks whether D1 already contains any non-deleted `admin_mode` access rule.
+3. If none exists and `ADMIN_BOOTSTRAP_PASSWORD` is configured, Worker seeds one hashed `bootstrap admin access` rule in D1.
+4. Operator uses the hidden password monolith to enter `admin_mode`, then creates permanent rules from hidden admin.
+
 ## Route Surface
 
 Public:
@@ -81,6 +87,7 @@ Expected `wrangler.toml` bindings:
 - `ANALYTICS`: Analytics Engine dataset
 - `PEPPER`: Worker secret
 - `SESSION_SECRET`: Worker secret
+- `ADMIN_BOOTSTRAP_PASSWORD`: Worker secret required for production bootstrap until first admin rule exists
 - optional `TURNSTILE_SECRET`
 
 ## Why Pages And Worker Stay Separate

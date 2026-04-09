@@ -38,8 +38,8 @@ cp .dev.vars.example .dev.vars
 3. Fill `.dev.vars` with strong secrets:
 - `PEPPER`
 - `SESSION_SECRET`
+- `ADMIN_BOOTSTRAP_PASSWORD`
 - optional `TURNSTILE_SECRET`
-- optional `ADMIN_BOOTSTRAP_PASSWORD`
 
 4. Apply local D1 migrations:
 
@@ -55,6 +55,22 @@ npm run dev
 ```
 
 Frontend runs on `http://127.0.0.1:5173`, Worker on `http://127.0.0.1:8787`.
+
+## Production Bootstrap
+
+`ADMIN_BOOTSTRAP_PASSWORD` is not an optional convenience secret. It is the required production-safe bootstrap path that prevents the deadlock where `admin_mode` is locked and `access_rules` is empty.
+
+Bootstrap flow:
+- deploy Worker with `ADMIN_BOOTSTRAP_PASSWORD` set as a long random secret
+- on the first live `GET /api/bootstrap` or `POST /api/auth/enter`, the Worker checks whether D1 already has any non-deleted `admin_mode` access rule
+- if no admin rule exists yet, the Worker seeds exactly one hashed D1 rule labeled `bootstrap admin access` that targets `admin_mode`
+- operator enters the hidden password monolith with that bootstrap password, reaches hidden admin, creates permanent access rules, and then rotates or removes the bootstrap secret
+
+Properties:
+- raw bootstrap password is never stored in D1
+- seeded rule still uses per-rule salt plus server-side pepper hashing
+- bootstrap does not add a second backend or bypass D1
+- if an admin rule already exists, bootstrap seeding does nothing
 
 ## Cloudflare Login And Resource Creation
 
@@ -105,6 +121,12 @@ Current live fallback for this repository:
 This cross-origin setup is used only because the account currently has no Cloudflare zone to attach routes to.
 
 If Cloudflare refuses the exact public name `abihsgelo`, stop and resolve that first instead of renaming in code.
+
+Production secrets to set in Cloudflare Worker:
+- `PEPPER`
+- `SESSION_SECRET`
+- `ADMIN_BOOTSTRAP_PASSWORD`
+- optional `TURNSTILE_SECRET`
 
 ## Scripts
 

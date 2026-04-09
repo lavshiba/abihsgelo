@@ -6,6 +6,7 @@ export interface Env {
   ANALYTICS: AnalyticsEngineDataset;
   PEPPER: string;
   SESSION_SECRET: string;
+  ADMIN_BOOTSTRAP_PASSWORD?: string;
   TURNSTILE_SECRET?: string;
   SITE_ORIGIN?: string;
 }

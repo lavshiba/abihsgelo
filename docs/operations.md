@@ -9,6 +9,7 @@
 Key signals:
 - Worker reachable
 - D1 query success
+- bootstrap secret configured when no admin rule exists yet
 - last live refresh time
 - snapshot age
 - stale warning
@@ -27,6 +28,18 @@ Actions:
 3. inspect source fetch errors
 4. if needed, re-deploy last known good Worker
 5. verify Pages still serves `snapshot.json`
+
+## First Deploy Checklist
+
+Before the first production deploy:
+1. set `PEPPER`
+2. set `SESSION_SECRET`
+3. set `ADMIN_BOOTSTRAP_PASSWORD`
+4. deploy Worker
+5. load the public site once so bootstrap seeding can run
+6. enter hidden password flow with the bootstrap password
+7. create permanent admin and protected-mode access rules
+8. rotate or remove the bootstrap secret after permanent admin access is confirmed
 
 ## Panic Mode
 

@@ -1,5 +1,6 @@
 PEPPER=replace-with-long-random-pepper
 SESSION_SECRET=replace-with-long-random-session-secret
 TURNSTILE_SECRET=
-ADMIN_BOOTSTRAP_PASSWORD=
+# Required in production. First live bootstrap request seeds the first admin_mode access rule from this secret if D1 has no admin rule yet.
+ADMIN_BOOTSTRAP_PASSWORD=replace-with-long-random-bootstrap-password
 SITE_ORIGIN=http://127.0.0.1:5173

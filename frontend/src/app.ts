@@ -1,4 +1,5 @@
 import QRCode from "qrcode";
+import { buildProxyTitle } from "@abihsgelo/shared";
 import type {
   AccessRuleSummary,
   AdminPayload,
@@ -10,7 +11,12 @@ import type {
 } from "@abihsgelo/shared";
 
 type SceneState = "home" | "password" | "mode";
+type PasswordVisualState = "clearing" | "cursor" | "typing" | "success" | "fail" | "timeout";
+type ScrollTarget = "archive" | "fresh" | null;
+
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") ?? "";
+const PASSWORD_TIMEOUT_MS = 3800;
+const TELEGRAM_FALLBACK_DELAY_MS = 720;
 
 interface SessionState {
   token: string | null;
@@ -39,11 +45,22 @@ export class AppController {
   private bootstrap: BootstrapPayload = FALLBACK_BOOTSTRAP;
   private scene: SceneState = "home";
   private session: SessionState = { token: null, mode: null };
+  private homeDissolving = false;
   private passwordBuffer = "";
+  private passwordVisualState: PasswordVisualState = "cursor";
+  private passwordTimeoutHandle: number | null = null;
+  private transitionHandles: number[] = [];
   private walletOverlay: WalletEntry | null = null;
+  private copiedWalletId: string | null = null;
   private snapshot: { fresh: ProxyItem[]; archive: ProxyItem[] } = { fresh: [], archive: [] };
   private archiveOpen = false;
+  private currentProxiesPayload: ProxiesPayload | null = null;
+  private queuedProxiesPayload: ProxiesPayload | null = null;
+  private proxiesLoading = false;
   private pollingHandle: number | null = null;
+  private highlightProxyId: string | null = null;
+  private highlightHandle: number | null = null;
+  private pendingScrollTarget: ScrollTarget = null;
 
   public constructor(root: HTMLDivElement) {
     this.root = root;
@@ -72,7 +89,7 @@ export class AppController {
 
   private render(): void {
     this.root.innerHTML = "";
-    this.root.className = `scene-root scene-${this.scene}`;
+    this.root.className = `scene-root scene-${this.scene}${this.homeDissolving ? " scene-home-dissolving" : ""}`;
 
     if (this.scene === "home") {
       this.stopPolling();
@@ -81,50 +98,96 @@ export class AppController {
       this.stopPolling();
       this.root.append(this.renderPasswordScene());
     } else if (this.session.mode === "proxies_mode") {
-      void this.renderProxiesScene();
+      this.root.append(this.renderProxiesScene());
+      this.startPolling();
+      if (!this.currentProxiesPayload && !this.proxiesLoading) {
+        void this.ensureProxiesPayload(true);
+      }
     } else if (this.session.mode === "admin_mode") {
+      this.stopPolling();
       void this.renderAdminScene();
     }
 
     if (this.walletOverlay) {
       void this.root.append(this.renderWalletOverlay(this.walletOverlay));
     }
+
+    this.handlePostRender();
+  }
+
+  private handlePostRender(): void {
+    if (this.scene === "password") {
+      queueMicrotask(() => {
+        this.root.querySelector<HTMLInputElement>(".password-hidden-input")?.focus();
+      });
+    }
+
+    if (!this.pendingScrollTarget) {
+      return;
+    }
+
+    const target = this.pendingScrollTarget;
+    this.pendingScrollTarget = null;
+
+    queueMicrotask(() => {
+      const selector = target === "archive" ? ".archive-zone" : ".fresh-grid";
+      this.root.querySelector<HTMLElement>(selector)?.scrollIntoView({
+        behavior: "smooth",
+        block: target === "archive" ? "start" : "center"
+      });
+    });
   }
 
   private renderHomeScene(): HTMLElement {
     const shell = document.createElement("main");
-    shell.className = "home-shell";
+    shell.className = `home-shell${this.homeDissolving ? " is-dissolving" : ""}`;
     shell.addEventListener("click", (event) => {
       const target = event.target as HTMLElement;
-      if (target.closest("[data-interactive='true']")) {
+      if (this.homeDissolving || target.closest("[data-interactive='true']")) {
         return;
       }
 
-      this.scene = "password";
-      this.passwordBuffer = "";
-      this.render();
-      this.track("home_tap_to_enter");
+      this.enterPasswordScene();
     });
 
     shell.innerHTML = `
       <section class="home-top-stack">
         <p class="home-title">oleg shiba // abihsgelo</p>
-        <a class="tg-button" data-interactive="true" href="${this.bootstrap.telegramUrl}" aria-label="Telegram" target="_blank" rel="noreferrer">
-          <span>T</span>
+        <a class="tg-button" data-interactive="true" href="${this.bootstrap.telegramUrl}" aria-label="Telegram" rel="noreferrer">
+          <span>tg</span>
         </a>
         <p class="home-year">${this.bootstrap.yearLabel}</p>
       </section>
       <section class="home-empty-plane" aria-hidden="true"></section>
     `;
 
-    const tgButton = shell.querySelector<HTMLAnchorElement>(".tg-button");
-    tgButton?.addEventListener("click", () => this.track("tg_click"));
+    shell.querySelector<HTMLAnchorElement>(".tg-button")?.addEventListener("click", () => this.track("tg_click"));
 
     if (this.bootstrap.donateVisible) {
       shell.append(this.renderDonateBlock());
     }
 
     return shell;
+  }
+
+  private enterPasswordScene(): void {
+    this.clearPasswordFlow();
+    this.homeDissolving = true;
+    this.render();
+    void this.track("home_tap_to_enter");
+
+    this.pushTransition(() => {
+      this.homeDissolving = false;
+      this.scene = "password";
+      this.passwordVisualState = "clearing";
+      this.render();
+
+      this.pushTransition(() => {
+        this.passwordVisualState = "cursor";
+        this.render();
+        this.resetPasswordTimeout();
+      }, 110);
+    }, 160);
   }
 
   private renderDonateBlock(): HTMLElement {
@@ -159,133 +222,192 @@ export class AppController {
 
   private renderPasswordScene(): HTMLElement {
     const shell = document.createElement("main");
-    shell.className = "password-shell";
-
-    const block = document.createElement("div");
-    block.className = "password-block";
-    block.tabIndex = 0;
-    block.setAttribute("aria-label", "hidden password entry");
-    block.addEventListener("keydown", (event) => void this.onPasswordKey(event));
-    block.addEventListener("paste", (event) => {
-      event.preventDefault();
-      const pasted = event.clipboardData?.getData("text") ?? "";
-      this.passwordBuffer += pasted;
-      this.render();
+    shell.className = `password-shell password-state-${this.passwordVisualState}`;
+    shell.addEventListener("click", () => {
+      shell.querySelector<HTMLInputElement>(".password-hidden-input")?.focus();
     });
 
-    const upper = this.passwordBuffer.toLocaleUpperCase("en-US");
-    block.innerHTML = `
-      <div class="cursor-layer ${upper ? "has-text" : ""}">
-        ${upper ? this.renderPasswordLines(upper) : `<span class="center-cursor"></span>`}
-      </div>
-    `;
-    const controls = document.createElement("form");
-    controls.className = "password-controls";
-    controls.innerHTML = `
-      <label class="password-label" for="password-fallback">hidden entry</label>
-      <input
-        id="password-fallback"
-        class="password-input"
-        type="password"
-        inputmode="text"
-        autocomplete="off"
-        autocapitalize="none"
-        autocorrect="off"
-        spellcheck="false"
-        placeholder="type password"
-        value="${this.escapeHtml(this.passwordBuffer)}"
-      />
-      <div class="password-actions">
-        <button type="submit" class="password-submit">enter</button>
-        <button type="button" class="password-cancel">back</button>
-      </div>
-    `;
+    const stage = document.createElement("section");
+    stage.className = "password-stage";
+    stage.innerHTML = this.renderPasswordStage();
 
-    const input = controls.querySelector<HTMLInputElement>(".password-input");
-    input?.addEventListener("input", (event) => {
+    const input = document.createElement("input");
+    input.className = "password-hidden-input";
+    input.type = "text";
+    input.inputMode = "text";
+    input.autocomplete = "off";
+    input.autocapitalize = "none";
+    input.autocorrect = "off";
+    input.spellcheck = false;
+    input.value = this.passwordBuffer;
+    input.setAttribute("aria-label", "password");
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.leavePasswordScene("fail");
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (this.passwordBuffer.trim()) {
+          void this.submitPassword();
+        }
+        return;
+      }
+
+      this.resetPasswordTimeout();
+    });
+
+    input.addEventListener("input", (event) => {
       this.passwordBuffer = (event.currentTarget as HTMLInputElement).value;
+      this.passwordVisualState = this.passwordBuffer ? "typing" : "cursor";
       this.render();
-    });
-    controls.addEventListener("submit", (event) => {
-      event.preventDefault();
-      void this.submitPassword();
-    });
-    controls.querySelector<HTMLButtonElement>(".password-cancel")?.addEventListener("click", () => {
-      this.passwordBuffer = "";
-      this.scene = "home";
-      this.render();
+      this.resetPasswordTimeout();
     });
 
-    shell.addEventListener("click", (event) => {
-      if (!(event.target instanceof HTMLElement)) {
-        return;
-      }
-      if (event.target.closest(".password-controls")) {
-        return;
-      }
-      input?.focus();
-    });
-
-    shell.append(block, controls);
-
-    queueMicrotask(() => input?.focus() ?? block.focus());
+    stage.append(input);
+    shell.append(stage);
     return shell;
   }
 
-  private renderPasswordLines(input: string): string {
-    const characters = [...input];
-    const viewportWidth = typeof window !== "undefined" ? Math.max(window.innerWidth, 320) : 1200;
-    const columns = characters.length <= 2 ? characters.length : Math.max(4, Math.floor(viewportWidth / 150));
-    const lines: string[] = [];
-
-    for (let index = 0; index < characters.length; index += columns) {
-      lines.push(characters.slice(index, index + columns).join(""));
+  private renderPasswordStage(): string {
+    if (this.passwordVisualState === "clearing") {
+      return `<div class="password-blank"></div>`;
     }
 
-    return `<div class="password-lines">${lines
-      .map((line, index) => `<p class="password-line" style="opacity:${0.62 + index / Math.max(lines.length, 1) * 0.34}">${line}</p>`)
-      .join("")}<span class="tail-cursor"></span></div>`;
+    if (!this.passwordBuffer) {
+      return `
+        <div class="password-monolith is-empty">
+          <div class="cursor-shell">
+            <span class="center-cursor"></span>
+          </div>
+        </div>
+      `;
+    }
+
+    const settled = this.passwordVisualState === "success";
+    const rows = this.layoutPasswordRows(this.passwordBuffer, settled);
+    const size = this.passwordSizeToken(this.passwordBuffer.length);
+
+    return `
+      <div class="password-monolith ${settled ? "is-settled" : "is-live"}" data-size="${size}">
+        ${rows
+          .map((row, rowIndex) => {
+            const cells = [...row]
+              .map((character) => {
+                if (character === " ") {
+                  return `<span class="glyph glyph-space">&nbsp;</span>`;
+                }
+
+                return `<span class="glyph">${this.escapeHtml(character)}</span>`;
+              })
+              .join("");
+            const cursor = rowIndex === rows.length - 1 && !settled ? `<span class="tail-cursor"></span>` : "";
+            return `<p class="password-row">${cells}${cursor}</p>`;
+          })
+          .join("")}
+      </div>
+    `;
   }
 
-  private async onPasswordKey(event: KeyboardEvent): Promise<void> {
-    if (event.key === "Escape") {
-      this.passwordBuffer = "";
-      this.scene = "home";
-      this.render();
-      return;
+  private layoutPasswordRows(input: string, settled: boolean): string[] {
+    const characters = [...input.toLocaleUpperCase("en-US")];
+    const length = characters.length;
+
+    if (length <= 2) {
+      return [characters.join("")];
     }
 
-    if (event.key === "Backspace") {
-      event.preventDefault();
-      this.passwordBuffer = this.passwordBuffer.slice(0, -1);
-      this.render();
-      return;
-    }
+    if (!settled) {
+      const columns = Math.min(length, Math.max(3, Math.round(Math.sqrt(length * 2.35))));
+      const rows: string[] = [];
 
-    if (event.key === "Enter") {
-      event.preventDefault();
-      if (!this.passwordBuffer.trim()) {
-        return;
+      for (let index = 0; index < length; index += columns) {
+        rows.push(characters.slice(index, index + columns).join(""));
       }
 
-      await this.submitPassword();
-      return;
+      return rows;
     }
 
-    if (event.key.length === 1) {
-      event.preventDefault();
-      this.passwordBuffer += event.key;
-      this.render();
+    const rowCount = Math.max(1, Math.min(4, Math.round(Math.sqrt(length / 2.8))));
+    const rows: string[] = [];
+    let cursor = 0;
+
+    for (let row = 0; row < rowCount; row += 1) {
+      const remaining = length - cursor;
+      const rowsLeft = rowCount - row;
+      const take = Math.ceil(remaining / rowsLeft);
+      rows.push(characters.slice(cursor, cursor + take).join(""));
+      cursor += take;
     }
+
+    return rows;
+  }
+
+  private passwordSizeToken(length: number): string {
+    if (length <= 1) {
+      return "single";
+    }
+    if (length === 2) {
+      return "double";
+    }
+    if (length <= 6) {
+      return "giant";
+    }
+    if (length <= 14) {
+      return "dense";
+    }
+    return "compact";
+  }
+
+  private resetPasswordTimeout(): void {
+    if (this.passwordTimeoutHandle !== null) {
+      window.clearTimeout(this.passwordTimeoutHandle);
+    }
+
+    this.passwordTimeoutHandle = window.setTimeout(() => {
+      this.leavePasswordScene("timeout");
+    }, PASSWORD_TIMEOUT_MS);
+  }
+
+  private clearPasswordFlow(): void {
+    if (this.passwordTimeoutHandle !== null) {
+      window.clearTimeout(this.passwordTimeoutHandle);
+      this.passwordTimeoutHandle = null;
+    }
+
+    for (const handle of this.transitionHandles) {
+      window.clearTimeout(handle);
+    }
+    this.transitionHandles = [];
+  }
+
+  private pushTransition(callback: () => void, delay: number): void {
+    const handle = window.setTimeout(() => {
+      this.transitionHandles = this.transitionHandles.filter((value) => value !== handle);
+      callback();
+    }, delay);
+    this.transitionHandles.push(handle);
+  }
+
+  private leavePasswordScene(reason: "fail" | "timeout"): void {
+    this.clearPasswordFlow();
+    this.passwordVisualState = reason;
+    this.render();
+
+    this.pushTransition(() => {
+      this.passwordBuffer = "";
+      this.scene = "home";
+      this.passwordVisualState = "cursor";
+      this.render();
+    }, reason === "fail" ? 180 : 220);
   }
 
   private async submitPassword(): Promise<void> {
-    const timeout = window.setTimeout(() => {
-      this.track("worker_timeout");
-      this.scene = "home";
-      this.passwordBuffer = "";
-      this.render();
-    }, 3800);
+    this.clearPasswordFlow();
+    this.resetPasswordTimeout();
 
     try {
       const result = await this.fetchJson<{ ok: boolean; mode?: string; token?: string }>(this.apiUrl("/api/auth/enter"), {
@@ -294,117 +416,265 @@ export class AppController {
         headers: { "Content-Type": "application/json" }
       });
 
-      window.clearTimeout(timeout);
-
       if (!result.ok || !result.mode || !result.token) {
-        this.scene = "home";
-        this.passwordBuffer = "";
-        this.render();
+        this.leavePasswordScene("fail");
         return;
       }
 
-      this.session = { mode: result.mode, token: result.token };
-      this.passwordBuffer = "";
-      this.scene = "mode";
+      this.clearPasswordFlow();
+      this.passwordVisualState = "success";
       this.render();
+
+      this.pushTransition(() => {
+        this.session = { mode: result.mode ?? null, token: result.token ?? null };
+        this.passwordBuffer = "";
+        this.scene = "mode";
+        if (result.mode === "proxies_mode") {
+          this.archiveOpen = false;
+          this.pendingScrollTarget = "fresh";
+          void this.ensureProxiesPayload(true);
+        }
+        this.render();
+      }, 320);
     } catch {
-      window.clearTimeout(timeout);
-      this.scene = "home";
-      this.passwordBuffer = "";
-      this.render();
+      this.leavePasswordScene("timeout");
     }
   }
 
-  private async renderProxiesScene(): Promise<void> {
-    const payload = await this.fetchJson<ProxiesPayload>(this.apiUrl("/api/modes/proxies_mode"), {
-      headers: this.authHeaders()
-    }).catch(() => {
-      return {
-        mode: "proxies_mode" as const,
-        title: this.snapshot.fresh.length ? `последние ${this.snapshot.fresh.length} свежих прокси` : "идет первая загрузка прокси...",
-        lastSuccessfulRefreshAt: null,
-        isStale: true,
-        staleReason: "temporarily showing last saved snapshot",
-        fresh: this.snapshot.fresh,
-        archive: this.snapshot.archive
-      };
-    });
-
+  private renderProxiesScene(): HTMLElement {
+    const payload = this.currentProxiesPayload ?? this.buildProxyFallbackPayload();
     const shell = document.createElement("main");
-    shell.className = "proxies-shell";
+    shell.className = `proxies-shell${this.archiveOpen ? " archive-visible" : ""}`;
     shell.innerHTML = `
       <section class="proxies-stack">
         <h1>${payload.title}</h1>
         <p class="status-line">последнее успешное обновление: ${payload.lastSuccessfulRefreshAt ? this.formatTimestamp(payload.lastSuccessfulRefreshAt) : "—"}</p>
-        ${payload.isStale ? `<p class="stale-line">временно показана последняя сохраненная версия</p>` : ""}
+        ${payload.isStale ? `<p class="stale-line">${payload.staleReason ?? "временно показана последняя сохраненная версия"}</p>` : ""}
       </section>
     `;
 
     shell.append(this.renderFreshGrid(payload.fresh));
+
     if (payload.archive.length > 0) {
       shell.append(this.renderArchive(payload.archive));
     }
 
-    this.root.append(shell);
-    this.startPolling();
+    return shell;
+  }
+
+  private buildProxyFallbackPayload(): ProxiesPayload {
+    const fresh = this.snapshot.fresh.slice(0, 9);
+    return {
+      mode: "proxies_mode",
+      title: buildProxyTitle(fresh.length),
+      lastSuccessfulRefreshAt: null,
+      isStale: true,
+      staleReason: "временно показана последняя сохраненная версия",
+      fresh,
+      archive: this.snapshot.archive
+    };
   }
 
   private renderFreshGrid(items: ProxyItem[]): HTMLElement {
+    const count = Math.min(items.length, 9);
     const grid = document.createElement("section");
-    grid.className = "fresh-grid";
+    grid.className = `fresh-grid fresh-grid-count-${count}`;
 
-    for (const item of items.slice(0, 9)) {
-      const card = document.createElement("a");
-      card.className = "proxy-card";
-      card.href = item.proxyUrl;
-      card.target = "_blank";
-      card.rel = "noreferrer";
+    items.slice(0, 9).forEach((item, index) => {
+      const card = document.createElement("button");
+      const placement = this.freshPlacement(count, index);
       const date = new Date(item.postedAt);
+      card.type = "button";
+      card.className = `proxy-card${this.highlightProxyId === item.id ? " is-accented" : ""}`;
+      card.style.gridColumn = `${placement.column} / span 2`;
+      card.style.gridRow = String(placement.row);
       card.innerHTML = `
         <strong>#${item.proxyNumber}</strong>
         <span>${date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
         <span>${date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit" })}</span>
       `;
-      card.addEventListener("click", () => this.track("proxy_click", { proxyId: item.id }));
+      card.addEventListener("click", () => {
+        void this.openProxy(item, false);
+      });
       grid.append(card);
-    }
+    });
 
     return grid;
   }
 
+  private freshPlacement(count: number, index: number): { column: number; row: number } {
+    const placements: Record<number, Array<{ column: number; row: number }>> = {
+      1: [{ column: 3, row: 1 }],
+      2: [{ column: 2, row: 1 }, { column: 4, row: 1 }],
+      3: [{ column: 1, row: 1 }, { column: 3, row: 1 }, { column: 5, row: 1 }],
+      4: [{ column: 2, row: 1 }, { column: 4, row: 1 }, { column: 2, row: 2 }, { column: 4, row: 2 }],
+      5: [{ column: 2, row: 1 }, { column: 4, row: 1 }, { column: 1, row: 2 }, { column: 3, row: 2 }, { column: 5, row: 2 }],
+      6: [{ column: 1, row: 1 }, { column: 3, row: 1 }, { column: 5, row: 1 }, { column: 1, row: 2 }, { column: 3, row: 2 }, { column: 5, row: 2 }],
+      7: [{ column: 2, row: 1 }, { column: 4, row: 1 }, { column: 1, row: 2 }, { column: 3, row: 2 }, { column: 5, row: 2 }, { column: 2, row: 3 }, { column: 4, row: 3 }],
+      8: [{ column: 1, row: 1 }, { column: 3, row: 1 }, { column: 5, row: 1 }, { column: 2, row: 2 }, { column: 4, row: 2 }, { column: 1, row: 3 }, { column: 3, row: 3 }, { column: 5, row: 3 }],
+      9: [{ column: 1, row: 1 }, { column: 3, row: 1 }, { column: 5, row: 1 }, { column: 1, row: 2 }, { column: 3, row: 2 }, { column: 5, row: 2 }, { column: 1, row: 3 }, { column: 3, row: 3 }, { column: 5, row: 3 }]
+    };
+
+    return placements[Math.max(1, count)][index] ?? { column: 1 + (index % 3) * 2, row: Math.floor(index / 3) + 1 };
+  }
+
   private renderArchive(items: ProxyItem[]): HTMLElement {
     const section = document.createElement("section");
-    section.className = `archive-zone ${this.archiveOpen ? "is-open" : ""}`;
+    section.className = `archive-zone${this.archiveOpen ? " is-open" : ""}`;
 
     const trigger = document.createElement("button");
     trigger.type = "button";
     trigger.className = "archive-trigger";
-    trigger.textContent = `прокси постарее (${items.length})`;
+    trigger.innerHTML = `
+      <span class="archive-trigger-label">прокси постарее (${items.length})</span>
+      <span class="archive-trigger-arrow" aria-hidden="true">↓</span>
+    `;
     trigger.addEventListener("click", () => {
       this.archiveOpen = !this.archiveOpen;
+      this.pendingScrollTarget = this.archiveOpen ? "archive" : "fresh";
       this.track(this.archiveOpen ? "archive_open" : "archive_close");
+
+      if (!this.archiveOpen && this.queuedProxiesPayload) {
+        this.applyProxyPayload(this.queuedProxiesPayload, true);
+        this.queuedProxiesPayload = null;
+      }
+
       this.render();
     });
-
     section.append(trigger);
 
     if (this.archiveOpen) {
       const grid = document.createElement("div");
       grid.className = "archive-grid";
-      for (const item of items) {
-        const card = document.createElement("a");
+      const columns = window.innerWidth >= 920 ? 10 : 5;
+      const rowCount = Math.max(1, Math.ceil(items.length / columns));
+
+      items.forEach((item, index) => {
+        const card = document.createElement("button");
+        const row = Math.floor(index / columns);
+        const delay = (rowCount - row - 1) * 38;
+        card.type = "button";
         card.className = "archive-card";
-        card.href = item.proxyUrl;
-        card.target = "_blank";
-        card.rel = "noreferrer";
+        card.style.animationDelay = `${delay}ms`;
         card.textContent = `#${item.proxyNumber}`;
-        card.addEventListener("click", () => this.track("proxy_click", { proxyId: item.id, archive: true }));
+        card.addEventListener("click", () => {
+          void this.openProxy(item, true);
+        });
         grid.append(card);
-      }
+      });
       section.append(grid);
     }
 
     return section;
+  }
+
+  private async ensureProxiesPayload(force = false): Promise<void> {
+    if (this.proxiesLoading) {
+      return;
+    }
+
+    if (!force && this.currentProxiesPayload) {
+      return;
+    }
+
+    this.proxiesLoading = true;
+    try {
+      const payload = await this.fetchJson<ProxiesPayload>(this.apiUrl("/api/modes/proxies_mode"), {
+        headers: this.authHeaders()
+      });
+      this.applyFetchedProxies(payload);
+    } catch {
+      this.applyFetchedProxies(this.buildProxyFallbackPayload());
+    } finally {
+      this.proxiesLoading = false;
+    }
+  }
+
+  private applyFetchedProxies(payload: ProxiesPayload): void {
+    if (this.archiveOpen && this.currentProxiesPayload && this.proxyPayloadChanged(this.currentProxiesPayload, payload)) {
+      this.queuedProxiesPayload = payload;
+      return;
+    }
+
+    this.applyProxyPayload(payload, true);
+    if (this.scene === "mode" && this.session.mode === "proxies_mode") {
+      this.render();
+    }
+  }
+
+  private applyProxyPayload(payload: ProxiesPayload, animateHighlight: boolean): void {
+    const previousFirst = this.currentProxiesPayload?.fresh[0]?.id ?? null;
+    const nextFirst = payload.fresh[0]?.id ?? null;
+    this.currentProxiesPayload = payload;
+
+    if (!animateHighlight || !previousFirst || !nextFirst || previousFirst === nextFirst) {
+      return;
+    }
+
+    this.highlightProxyId = nextFirst;
+    if (this.highlightHandle !== null) {
+      window.clearTimeout(this.highlightHandle);
+    }
+    this.highlightHandle = window.setTimeout(() => {
+      this.highlightProxyId = null;
+      if (this.scene === "mode" && this.session.mode === "proxies_mode") {
+        this.render();
+      }
+    }, 1600);
+  }
+
+  private proxyPayloadChanged(left: ProxiesPayload, right: ProxiesPayload): boolean {
+    const leftKey = `${left.lastSuccessfulRefreshAt}:${left.fresh.map((item) => item.id).join(",")}:${left.archive.slice(0, 6).map((item) => item.id).join(",")}`;
+    const rightKey = `${right.lastSuccessfulRefreshAt}:${right.fresh.map((item) => item.id).join(",")}:${right.archive.slice(0, 6).map((item) => item.id).join(",")}`;
+    return leftKey !== rightKey;
+  }
+
+  private async openProxy(item: ProxyItem, archive: boolean): Promise<void> {
+    await this.track("proxy_click", { proxyId: item.id, archive });
+
+    const deepLink = this.telegramDeepLink(item.proxyUrl);
+    let fallbackHandled = false;
+
+    const completeFallback = (): void => {
+      if (fallbackHandled) {
+        return;
+      }
+      fallbackHandled = true;
+      window.location.assign(item.proxyUrl);
+    };
+
+    const cancelFallback = (): void => {
+      fallbackHandled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", cancelFallback);
+    };
+
+    const handleVisibilityChange = (): void => {
+      if (document.visibilityState === "hidden") {
+        cancelFallback();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange, { once: true });
+    window.addEventListener("pagehide", cancelFallback, { once: true });
+    window.setTimeout(() => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", cancelFallback);
+      if (!fallbackHandled && document.visibilityState === "visible") {
+        completeFallback();
+      }
+    }, TELEGRAM_FALLBACK_DELAY_MS);
+
+    window.location.assign(deepLink);
+  }
+
+  private telegramDeepLink(proxyUrl: string): string {
+    try {
+      const url = new URL(proxyUrl);
+      return `tg://proxy?${url.searchParams.toString()}`;
+    } catch {
+      return proxyUrl;
+    }
   }
 
   private async renderAdminScene(): Promise<void> {
@@ -635,8 +905,6 @@ export class AppController {
       const anchor = document.createElement("a");
       anchor.href = this.apiUrl(`/api/admin/export?kind=${kind}`);
       anchor.textContent = `export ${kind}`;
-      anchor.target = "_blank";
-      anchor.rel = "noreferrer";
       anchor.className = "export-link";
       anchor.addEventListener("click", (event) => {
         event.preventDefault();
@@ -699,6 +967,7 @@ export class AppController {
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay) {
         this.walletOverlay = null;
+        this.copiedWalletId = null;
         this.render();
       }
     });
@@ -716,7 +985,7 @@ export class AppController {
       <h2>${wallet.title}</h2>
       <img alt="${wallet.title} qr" />
       <code>${wallet.address}</code>
-      <button type="button" class="copy-button">copy address</button>
+      <button type="button" class="copy-button">${this.copiedWalletId === wallet.id ? "copied" : "copy address"}</button>
       <p>${wallet.warningText}</p>
     `;
 
@@ -724,10 +993,8 @@ export class AppController {
     button?.addEventListener("click", async () => {
       await navigator.clipboard.writeText(wallet.address);
       this.track("wallet_copy", { walletId: wallet.id });
-      button.textContent = "copied";
-      window.setTimeout(() => {
-        button.textContent = "copy address";
-      }, 600);
+      this.copiedWalletId = wallet.id;
+      this.render();
     });
 
     overlay.append(card);
@@ -757,8 +1024,8 @@ export class AppController {
     }
 
     this.pollingHandle = window.setInterval(() => {
-      if (document.visibilityState === "visible" && !this.archiveOpen && this.session.mode === "proxies_mode") {
-        this.render();
+      if (document.visibilityState === "visible" && this.session.mode === "proxies_mode") {
+        void this.ensureProxiesPayload(true);
       }
     }, 60_000);
   }

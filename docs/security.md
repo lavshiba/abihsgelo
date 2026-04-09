@@ -7,6 +7,7 @@
 - no secrets in frontend
 - no raw passwords in D1, logs, or analytics
 - no protected fallback content in `snapshot.json`
+- production bootstrap must not deadlock hidden admin when D1 starts without any admin rule
 
 ## Password Storage
 
@@ -15,6 +16,7 @@
 - compute scrypt hash over `normalized_password + pepper`
 - store `password_hash` and `password_salt`
 - `PEPPER` exists only as a Worker secret
+- bootstrap password follows the same hashing path when the Worker seeds the first `admin_mode` rule from `ADMIN_BOOTSTRAP_PASSWORD`
 
 ## Sessions
 
@@ -57,6 +59,7 @@ Controls:
 - protected modes require Worker decision every time
 - wrong password, timeout, or Worker outage all return to home
 - admin is a hidden protected mode, not a public route
+- if D1 has no `admin_mode` rule yet, Worker can seed exactly one hashed bootstrap admin rule from the server-side `ADMIN_BOOTSTRAP_PASSWORD` secret
 - audit trail records successes, failures, and admin changes
 - analytics use IDs or labels, never raw passwords
 - current cross-origin Pages -> Worker traffic is restricted by explicit CORS allowlist to the Pages production origin and local dev origins only

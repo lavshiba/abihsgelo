@@ -49,6 +49,7 @@ Rules:
 - `2026` is quieter than the name line
 - almost any tap outside interactive elements starts hidden password entry
 - donate block is centered near the bottom and fully admin-driven
+- tap on donate pills or `tg` must not trigger hidden entry
 
 ## Wallet Overlay
 
@@ -70,6 +71,7 @@ Rules:
 2. screen clears to graphite
 3. only then a thick slower-blinking cursor appears at the center
 4. no input field box and no hint text
+5. no visible labels, helper copy, submit button, or back button
 
 ## Password Mode
 
@@ -86,9 +88,12 @@ ASCII feeling:
 
 Rules:
 - first character becomes a giant screen-dominant form
-- the block grows by optical fill, not word wrapping
+- two characters become two huge adjacent forms
+- from three characters onward the block grows by optical fill, not textarea-style word wrapping
 - text is visible, uppercase visually, case-insensitive in validation
 - cursor stays at the end of the last line
+- letter spacing stays tight; word spacing is wider than letter spacing
+- the block should read as a fullscreen typographic lockup
 - on enter:
   - success: block equalizes, soft blur, births target mode
   - fail: soft faster dissolve back to home
@@ -105,6 +110,10 @@ Fresh grid:
 - dense spacing
 - nearly square cards
 - card order newest top-left to oldest bottom-right
+- layouts with fewer than 9 cards must stay centered and composed:
+  - `1`: one centered card
+  - `3`: one complete centered row
+  - `5`: balanced centered composition, not an empty 3-column grid with holes
 
 Card content:
 
@@ -117,6 +126,7 @@ Card content:
 Archive:
 - darker secondary layer
 - archive pill label: `прокси постарее (n)`
+- trigger reads like a large soft slab, not a plain collapse control
 - mobile grid: 5 columns
 - desktop grid: 10 columns
 - archive card content: only `#number`
@@ -136,3 +146,5 @@ Archive:
 - appearance often includes a slight upward drift
 - archive opens row-by-row from bottom upward
 - live proxy update reflows the grid rather than flashing
+- when archive is open, live updates queue quietly and apply only after the view returns to fresh
+- newest incoming top-left card gets only a very thin, short accent

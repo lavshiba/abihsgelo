@@ -42,6 +42,7 @@ export default {
       }
 
       if (url.pathname === "/api/bootstrap" && method === "GET") {
+        await ensureAdminBootstrapRule(env);
         return json(await getBootstrap(env), 200, corsHeaders);
       }
 
@@ -53,6 +54,7 @@ export default {
       }
 
       if (url.pathname === "/api/auth/enter" && method === "POST") {
+        await ensureAdminBootstrapRule(env);
         const limit = enforceRateLimit(request, "auth", 8, 5 * 60_000);
         if (!limit.ok) {
           return json({ ok: false }, 429, corsHeaders);
@@ -189,6 +191,7 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 async function authenticate(env: Env, password: string): Promise<{ ok: boolean; mode?: string; token?: string }> {
+  await ensureAdminBootstrapRule(env);
   const rules = await listAccessRules(env);
   const now = Date.now();
 
@@ -361,6 +364,55 @@ async function createAccessRule(env: Env, body: JsonBody): Promise<void> {
   await addAudit(env, "admin_change_access_rule", "admin", { id });
 }
 
+async function ensureAdminBootstrapRule(env: Env): Promise<void> {
+  const bootstrapPassword = env.ADMIN_BOOTSTRAP_PASSWORD?.trim();
+  if (!bootstrapPassword) {
+    return;
+  }
+
+  const existing = await env.DB.prepare(
+    `SELECT id
+     FROM access_rules
+     WHERE target_mode = 'admin_mode' AND soft_deleted_at IS NULL
+     LIMIT 1`
+  ).first<{ id: string }>();
+
+  if (existing) {
+    return;
+  }
+
+  const salt = randomHex(16);
+  const hash = await hashPassword(bootstrapPassword, salt, env.PEPPER);
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO access_rules (
+      id, label, password_hash, password_salt, target_mode, is_enabled, priority, notes,
+      usage_count, success_count, fail_count, last_used_at, created_at, updated_at,
+      expires_at, max_uses, first_use_only, soft_deleted_at
+    ) VALUES (
+      'bootstrap-admin-rule',
+      'bootstrap admin access',
+      ?1,
+      ?2,
+      'admin_mode',
+      1,
+      1000,
+      'Seeded automatically from ADMIN_BOOTSTRAP_PASSWORD. Rotate from admin after first successful production login.',
+      0,
+      0,
+      0,
+      NULL,
+      CURRENT_TIMESTAMP,
+      CURRENT_TIMESTAMP,
+      NULL,
+      NULL,
+      0,
+      NULL
+    )`
+  ).bind(hash, salt).run();
+
+  await addAudit(env, "admin_bootstrap_rule_seeded", "system", { mode: "admin_mode" });
+}
+
 async function updateAccessRule(env: Env, id: string, body: JsonBody): Promise<void> {
   let passwordFragment = "";
   const bindValues: unknown[] = [String(body.targetMode ?? "home_mode"), Number(body.priority ?? 100), body.isEnabled ? 1 : 0];
@@ -422,10 +474,18 @@ async function getHealth(env: Env): Promise<Record<string, unknown>> {
   const state = await env.DB.prepare(
     `SELECT last_live_refresh_at, last_snapshot_at, last_refresh_status, stale_reason, session_version FROM proxy_state WHERE id = 1`
   ).first<Record<string, unknown>>();
+  const adminRule = await env.DB.prepare(
+    `SELECT id
+     FROM access_rules
+     WHERE target_mode = 'admin_mode' AND soft_deleted_at IS NULL
+     LIMIT 1`
+  ).first<{ id: string }>();
   return {
     worker: "ok",
     d1: "ok",
     analytics: "ok",
+    adminBootstrapConfigured: Boolean(env.ADMIN_BOOTSTRAP_PASSWORD?.trim()),
+    adminRulePresent: Boolean(adminRule?.id),
     ...state
   };
 }

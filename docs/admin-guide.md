@@ -2,6 +2,16 @@
 
 `admin_mode` is the hidden operational panel for the site.
 
+## First Bootstrap
+
+Production bootstrap path:
+- set `ADMIN_BOOTSTRAP_PASSWORD` as a strong Worker secret before the first live deploy
+- on the first bootstrap or auth request, Worker seeds the first `admin_mode` access rule if D1 has none
+- enter that password through the hidden typographic monolith
+- once inside hidden admin, create permanent access rules and rotate or remove the bootstrap secret
+
+This bootstrap path is required to prevent the deadlock where `admin_mode` is locked but `access_rules` is empty.
+
 ## What It Can Do
 
 - view access rules
@@ -43,6 +53,11 @@ Each access rule has:
 - optional `max_uses`
 - optional `first_use_only`
 - `soft_deleted_at`
+
+The automatically seeded bootstrap rule:
+- targets `admin_mode`
+- is stored hashed in D1 like any other rule
+- should be replaced or rotated after the first successful production admin login
 
 ## Lock Now
 
